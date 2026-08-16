@@ -1,0 +1,20 @@
+// Fixture do teste test/sim-purity.test.ts.
+//
+// Extensão .txt de propósito: fica fora do tsc, fora do build e fora do glob do
+// Vitest. O teste copia este conteúdo para src/sim/__lint_probe.ts, roda o oxlint
+// em cima dele e apaga.
+//
+// Cada linha abaixo tem que disparar exatamente a regra anotada. Se uma parar de
+// disparar, a trava de pureza do src/sim/ furou e o teste falha.
+
+import { Application } from "pixi.js"; // → no-restricted-imports (grupo renderer)
+import { camera } from "../render/world/camera"; // → no-restricted-imports (grupo camadas)
+
+export const a = Math.random(); // → no-restricted-properties
+export const b = Date.now(); // → no-restricted-properties
+export const c = performance.now(); // → no-restricted-properties
+export const d = window.innerWidth; // → no-restricted-globals
+export const e = document.title; // → no-restricted-globals
+export const f = localStorage.getItem("x"); // → no-restricted-globals
+
+export const unused = [Application, camera];

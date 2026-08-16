@@ -203,6 +203,12 @@ O objetivo é atrito contra edição casual, nada além disso.
 - Testes junto do código: `taxes.ts` → `taxes.test.ts`
 - Nada de comentário explicando o óbvio; comente o **porquê**, não o **o quê**
 - Commits pequenos e atômicos
+- `noUncheckedIndexedAccess` fica **desligado** na Fase 0 — o código de grid e flow field
+  (Etapas 3 e 4) é acesso indexado denso, e a flag ali vira atrito puro. **Ligar em
+  `src/sim/` assim que a Fase 1 começar**, via `src/sim/tsconfig.json` próprio
+  (`"extends": "../../tsconfig.json"` + `"noUncheckedIndexedAccess": true`), com o script
+  `typecheck` passando a rodar os dois projetos. O núcleo é onde erro de índice vira bug
+  de economia silencioso; o renderer aguenta ficar sem.
 
 ---
 

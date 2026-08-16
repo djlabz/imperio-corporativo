@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import", "typescript", "unicorn"],
+  "categories": { "correctness": "error" },
+  "env": { "browser": true, "es2024": true },
+  "ignorePatterns": ["dist", "dist-electron", "release", "node_modules", "coverage"],
+
+  "overrides": [
+    {
+      // Regra Inviolável nº 1 do CLAUDE.md: src/sim/ é puro.
+      // Estas três regras vêm da categoria `restriction`, que NÃO liga por default
+      // (só `correctness` liga sozinha) — por isso cada uma é declarada com "error"
+      // aqui em vez de herdar de `categories`.
+      "files": ["src/sim/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["pixi.js", "pixi.js/*", "@pixi/*", "react", "react-dom", "react-dom/*"],
+                "message": "src/sim/ é puro. Nada de renderer aqui."
+              },
+              {
+                "group": ["**/render/**", "**/ui/**", "**/platform/**", "**/app/**"],
+                "message": "src/sim/ não conhece as camadas de fora. O fluxo é sim → render, nunca o contrário."
+              }
+            ]
+          }
+        ],
+
+        "no-restricted-globals": [
+          "error",
+          "window",
+          "document",
+          "localStorage",
+          "sessionStorage",
+          "fetch",
+          "navigator"
+        ],
+
+        // LIMITES DESTA TRAVA — leia antes de confiar nela.
+        // no-restricted-properties age sobre member expression literal. NÃO pega:
+        //   const { random } = Math;   → desestruturação
+        //   Math["random"]();          → acesso por string
+        //   new Date().getTime();      → instância, não a propriedade estática
+        //   globalThis.window;         → global alcançado por outro objeto
+        // Cobre o caso comum e o descuido honesto; não é garantia de pureza.
+        // A rede de segurança de baixo é o teste de determinismo (Etapa 2):
+        // se algo não-determinístico entrar no sim, ele quebra. O lint é a de cima.
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "Math",
+            "property": "random",
+            "message": "Use o PRNG com seed em core/rng.ts."
+          },
+          { "object": "Date", "property": "now", "message": "Use world.tickCount." },
+          { "object": "performance", "property": "now", "message": "Use world.tickCount." }
+        ]
+      }
+    }
+  ]
+}

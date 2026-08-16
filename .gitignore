@@ -14,3 +14,9 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# NÃO adicione src/sim/__lint_probe.ts aqui.
+# O oxlint sempre respeita o .gitignore e não tem flag para desligar isso
+# (--no-ignore cobre só .eslintignore). Ignorar o probe faz o oxlint pular o
+# arquivo e o test/sim-purity.test.ts perde o que ele deveria estar medindo.
+# O teste apaga o probe num finally; se sobrar algum, é para aparecer mesmo.

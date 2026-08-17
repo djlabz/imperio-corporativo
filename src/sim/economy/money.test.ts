@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createRng } from "../core/rng";
 import { add, applyRate, bps, centavos, fmt, mul, reais, sub, type Bps, type Money } from "./money";
 
 describe("centavos / reais", () => {
@@ -165,18 +166,50 @@ describe("applyRate() — precisão em valores grandes (BigInt, não float)", ()
     }
   });
 
-  it("fuzz: bate com o valor exato via BigInt em 5000 amostras grandes aleatórias", () => {
-    // Regressão do bug de precisão: gera valores na faixa onde a divergência
-    // apareceu de verdade (~1e14–1e15 centavos), compara com o cálculo
-    // independente via BigInt, e falha no primeiro descompasso.
-    for (let i = 0; i < 5000; i++) {
-      const money = Math.floor(1e14 + Math.random() * 9e14);
-      const rateValue = Math.floor(Math.random() * 10_000);
-      const expected = Number((BigInt(money) * BigInt(rateValue)) / 10_000n);
+  // Seeds literais, nunca derivadas de tempo: fuzz sem seed é irreproduzível por
+  // construção — acha a divergência e recusa dizer qual caso a produziu. Três
+  // seeds em vez de uma ampliam a cobertura sem custar determinismo.
+  const FUZZ_SEEDS = ["money-fuzz-a", "money-fuzz-b", "money-fuzz-c"] as const;
+  const FUZZ_SAMPLES = 5_000;
 
-      expect(applyRate(centavos(money), bps(rateValue))).toBe(expected);
-    }
-  });
+  it.each(FUZZ_SEEDS)(
+    'fuzz [seed "%s"]: bate com o valor exato via BigInt em 5000 amostras grandes',
+    (seed) => {
+      // Regressão do bug de precisão: gera valores na faixa onde a divergência
+      // apareceu de verdade (~1e14–1e15 centavos), compara com o cálculo
+      // independente via BigInt, e falha no primeiro descompasso.
+      const rng = createRng(seed);
+      let checked = 0;
+
+      for (let i = 0; i < FUZZ_SAMPLES; i++) {
+        const money = rng.int(1e14, 1e15 - 1);
+        const rateValue = rng.int(0, 9_999);
+        const expected = Number((BigInt(money) * BigInt(rateValue)) / 10_000n);
+        const actual = applyRate(centavos(money), bps(rateValue));
+
+        if (actual !== expected) {
+          expect.fail(
+            [
+              "divergência de precisão em applyRate — caso exato para reproduzir:",
+              `  seed:      "${seed}"`,
+              `  amostra:   ${i}`,
+              `  money:     ${money}`,
+              `  bps:       ${rateValue}`,
+              `  applyRate: ${actual}`,
+              `  BigInt:    ${expected}`,
+              `  delta:     ${actual - expected}`,
+            ].join("\n"),
+          );
+        }
+        checked++;
+      }
+
+      // Ancora que o laço rodou de verdade. Sem isto, um `FUZZ_SAMPLES` zerado
+      // por acidente deixaria o teste verde sem comparar nada — a mesma classe
+      // de falso-verde registrada em D-011.
+      expect(checked).toBe(FUZZ_SAMPLES);
+    },
+  );
 });
 
 describe("fmt() — formatação pt-BR", () => {

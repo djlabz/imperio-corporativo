@@ -278,6 +278,8 @@ que o teste certo falha, antes de restaurar.
 | Teste de determinismo vazio | `tick()` trivial → duas seeds batem tautologicamente |
 | Mutação inválida | Remover `sortableChildren` não quebrou nada: o Pixi liga a flag sozinho ao setar `zIndex`. A própria mutação estava errada |
 | `instanceof WebGLRenderingContext` | Falharia sempre — Pixi v8 usa contexto WebGL2, que não herda dessa classe. Trocado por duck-typing |
+| Fuzz sem seed é irreproduzível por construção | O fuzz de `applyRate` usava `Math.random()`. Se ele achasse uma divergência real de precisão, avisaria que existe bug e recusaria dizer qual caso o produziu. Trocado por três seeds literais do PRNG do projeto, com a mensagem de falha carregando seed, índice da amostra, `money`, `bps` e os dois resultados — reproduzir passou a ser copiar um número. Bônus: `Math.random()` em `src/sim/**` é barrado pelo lint de D-006, então o teste também deixava `pnpm lint` vermelho |
+| Relatório de etapa não é verificação | As Etapas 4 e 5 reportaram "lint ✅ 0 diagnósticos" com o lint vermelho desde `ea9717d`. O comando não tinha sido rodado; o relatório repetiu o estado esperado, não o medido. Correção de processo: rodar os cinco comandos (`typecheck`, `lint`, `test`, `build`, `format:check`) um por um e colar a saída bruta, nunca o resumo |
 
 **Princípio:** teste que passaria com o código quebrado é pior que teste ausente —
 dá confiança falsa. Ausente você sabe que não tem cobertura.
@@ -307,10 +309,18 @@ intacta, mas perder o WSL naquele momento apagaria o projeto.
 |---|---|---|
 | P-01 | Teste de divergência por seed (removido quando o campo `noise` saiu) | Algum sistema do `sim/` consumir o RNG dentro de `tick()` — provavelmente Etapa 4, com spawn e movimento de NPC |
 | P-02 | `noUncheckedIndexedAccess` em `src/sim/` via tsconfig próprio | Início da Fase 1 |
-| P-03 | Teste de orçamento de frame específico para o pool de NPC | Etapa 4 — NPC decorativo é lógica de `render/npc/`, não de `sim/` |
-| P-04 | Instrumentação de custo real de frame (vsync mascara o número) | Antes da Etapa 4 — ver D-005, é o que valida a decisão de engine |
+| P-03 | Teste de orçamento de frame específico para o pool de NPC, na suíte. **Continua aberta:** os números de escala da Etapa 4 (500–4000 NPCs) saíram de medição manual no browser, não de teste automatizado. `frame.perf.test.ts` cobre só mapa vazio sem NPC, e diz isso explicitamente no próprio comentário de cabeçalho. Nada na suíte hoje pega uma regressão no custo por NPC | Etapa 6 — o cenário de NPC vai rodar no `.exe` de qualquer jeito; é o momento de trocar a medição manual por trava automatizada |
 | P-05 | Skills `brainstorming` + `writing-plans`, vendoradas | Início da Fase 1 |
 | P-06 | Surto de frames longos no aquecimento, escalando com N (26 frames a 2000 NPCs, 160 a 4000), estabilizando em 6–18s sem resíduo. Hipótese não confirmada: alocação por respawn em `randomEdgePoint()`. Correção candidata: escrever direto em x/y em vez de retornar `{x, y}` | Se o surto aparecer com N ≤ 600 (o teto de pool real), ou se o `.exe` nativo da Etapa 6 mostrar comportamento pior |
+
+## Pendências fechadas
+
+Ficam registradas em vez de apagadas: saber que a pendência existiu e o que a
+fechou vale mais que uma tabela curta.
+
+| # | Item | Fechada por |
+|---|---|---|
+| P-04 | Instrumentação de custo real de frame (vsync mascara o número) | Etapa 3: `computeBudgetOccupancyPercent()`, contador de frames longos nos limiares de 20ms/33ms, 1% low em janela deslizante, modo sem vsync e overlay separando update/render do frame total. Todos com teste em `debugStats.test.ts` / `DebugOverlayView.test.ts`. Foi o instrumento que produziu os números da Etapa 4 e localizou o surto de aquecimento da P-06 |
 
 ---
 

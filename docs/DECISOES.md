@@ -126,6 +126,23 @@ para otimizar de teimoso até o número fechar.
 O spike comparativo em Godot foi oferecido e recusado. O risco é conhecido e
 aceito.
 
+**Adendo · 17/08/2026 · D-005 não fica validada na Etapa 4**
+
+A Etapa 4 mediu 500–4000 NPCs em vsync: orçamento de frame escala linear com a
+contagem de NPC (custo marginal ~0,0006–0,00095ms/NPC, estável através de uma
+faixa de 8×, sem sinal de O(n²)), draw calls ficam em 1 mesmo em 4000 NPCs, e
+o estado estacionário pós-aquecimento sustenta 60fps/60 de 1% low de forma
+limpa. Números bons — mas medidos através de ANGLE/D3D12, a camada de
+passthrough de GPU do WSL2, não o ambiente alvo (Windows nativo via Electron).
+Essa camada tem overhead que o build real não paga; a leitura de "piso
+conservador" é provavelmente correta, mas é uma leitura, não uma medição no
+ambiente que importa.
+
+**Consequência:** a condição de reabertura desta decisão ("a Etapa 4 é o teste
+que valida ou invalida") não está satisfeita ainda. **A validação real de
+D-005 fica para a Etapa 6**, quando o `.exe` roda nativo no Windows. Até lá,
+D-005 permanece com risco assumido, não risco medido no ambiente de verdade.
+
 ---
 
 ## D-006 · Núcleo de simulação puro e headless
@@ -293,3 +310,4 @@ intacta, mas perder o WSL naquele momento apagaria o projeto.
 | P-03 | Teste de orçamento de frame específico para o pool de NPC | Etapa 4 — NPC decorativo é lógica de `render/npc/`, não de `sim/` |
 | P-04 | Instrumentação de custo real de frame (vsync mascara o número) | Antes da Etapa 4 — ver D-005, é o que valida a decisão de engine |
 | P-05 | Skills `brainstorming` + `writing-plans`, vendoradas | Início da Fase 1 |
+| P-06 | Surto de frames longos no aquecimento, escalando com N (26 frames a 2000 NPCs, 160 a 4000), estabilizando em 6–18s sem resíduo. Hipótese não confirmada: alocação por respawn em `randomEdgePoint()`. Correção candidata: escrever direto em x/y em vez de retornar `{x, y}` | Se o surto aparecer com N ≤ 600 (o teto de pool real), ou se o `.exe` nativo da Etapa 6 mostrar comportamento pior |

@@ -53,3 +53,33 @@ export function computeBudgetOccupancyPercent(
   const budgetMs = 1000 / targetFps;
   return (workMs / budgetMs) * 100;
 }
+
+/** Limiares de frame longo, em ms. 20ms ~ perde um frame a 60Hz; 33ms ~ perde dois. */
+export const LONG_FRAME_THRESHOLD_MS = 20;
+export const VERY_LONG_FRAME_THRESHOLD_MS = 33;
+
+/**
+ * Contagem cumulativa de frames longos numa janela fixa (a sessão de
+ * medição inteira — sem reset automático; cria um tracker novo pra
+ * reiniciar a janela). Isto é a alternativa a "não ter o profiler de GC do
+ * Chrome": conta o que o jogador sente de verdade (frame perdido a 60Hz),
+ * sem depender de ferramenta externa nenhuma, e é testável com valores
+ * sintéticos.
+ */
+export interface LongFrameTracker {
+  readonly totalFrames: number;
+  readonly framesOver20ms: number;
+  readonly framesOver33ms: number;
+}
+
+export function createLongFrameTracker(): LongFrameTracker {
+  return { totalFrames: 0, framesOver20ms: 0, framesOver33ms: 0 };
+}
+
+export function recordLongFrame(tracker: LongFrameTracker, frameMs: number): LongFrameTracker {
+  return {
+    totalFrames: tracker.totalFrames + 1,
+    framesOver20ms: tracker.framesOver20ms + (frameMs > LONG_FRAME_THRESHOLD_MS ? 1 : 0),
+    framesOver33ms: tracker.framesOver33ms + (frameMs > VERY_LONG_FRAME_THRESHOLD_MS ? 1 : 0),
+  };
+}

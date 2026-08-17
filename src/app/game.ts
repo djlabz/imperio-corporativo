@@ -1,18 +1,23 @@
-import { Application, Container } from "pixi.js";
+import { Application, Container, Culler, CullerPlugin, extensions } from "pixi.js";
 import { attachDrawCallCounter } from "../render/debug/drawCallCounter";
 import {
   createDebugOverlay,
   readHeapMB,
   updateDebugOverlay,
 } from "../render/debug/DebugOverlayView";
+import { buildFlowField } from "../render/npc/flowField";
+import { buildNpcPoolView, syncNpcPoolView } from "../render/npc/NpcPoolView";
+import { createNpcPool, stepNpcPool } from "../render/npc/npcPool";
 import { applyToContainer, createCameraState } from "../render/world/camera";
 import { attachCameraInput } from "../render/world/cameraInput";
 import {
   computeBudgetOccupancyPercent,
   computeLow1PercentFps,
+  createLongFrameTracker,
   createStatsTracker,
   instantFps,
   recordFrame,
+  recordLongFrame,
 } from "../render/world/debugStats";
 import { buildTileGrid, WORLD_HEIGHT, WORLD_WIDTH } from "../render/world/tileMap";
 import { buildTileMapView } from "../render/world/TileMapView";
@@ -24,6 +29,10 @@ import { createUncappedScheduler, createVsyncScheduler } from "./frameScheduler"
 const BACKGROUND_COLOR = 0x1a1a1a;
 const WORLD_SEED = "etapa-3";
 
+/** Critério de aceite da Etapa 4: 500 NPCs visíveis, dentro de um pool de 600. */
+const NPC_ACTIVE_COUNT = 500;
+const NPC_POOL_CAPACITY = 600;
+
 /**
  * ?uncapped na URL desliga o vsync: o loop roda solto (ver frameScheduler.ts).
  * É o único jeito de ver headroom real — sob vsync, FPS fica preso no
@@ -34,7 +43,24 @@ function isUncappedRequested(): boolean {
   return new URLSearchParams(window.location.search).has("uncapped");
 }
 
+/**
+ * ?npcs=N sobrescreve a contagem de NPCs ativos (e a capacity do pool, sem
+ * folga) — usado só pro teste de escala (0/500/1000/2000/4000). Sem a flag,
+ * fica no critério de aceite da etapa: 500 ativos num pool de 600.
+ */
+function getNpcCountOverride(): number | undefined {
+  const raw = new URLSearchParams(window.location.search).get("npcs");
+  if (raw === null) return undefined;
+  const parsed = Math.floor(Number(raw));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
 export async function startGame(root: HTMLElement): Promise<Application> {
+  // Precisa ser registrado antes de Application.init() — Culler.shared.cull()
+  // funciona sem o plugin, mas o plugin é o que o Pixi recomenda pra simular
+  // o comportamento automático de culling que existia antes do v8.
+  extensions.add(CullerPlugin);
+
   const app = new Application();
   await app.init({
     resizeTo: root,
@@ -46,6 +72,15 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   const worldContainer = new Container({ sortableChildren: true });
   worldContainer.addChild(buildTileMapView(buildTileGrid()));
   app.stage.addChild(worldContainer);
+
+  const npcCountOverride = getNpcCountOverride();
+  const npcActiveCount = npcCountOverride ?? NPC_ACTIVE_COUNT;
+  const npcCapacity = npcCountOverride !== undefined ? npcCountOverride : NPC_POOL_CAPACITY;
+
+  const flowField = buildFlowField();
+  const npcPool = createNpcPool({ activeCount: npcActiveCount, capacity: npcCapacity });
+  const npcPoolView = buildNpcPoolView(npcPool.capacity);
+  worldContainer.addChild(npcPoolView.container);
 
   const overlay = createDebugOverlay();
   app.stage.addChild(overlay); // filho de app.stage, não de worldContainer — fica fixo na tela
@@ -61,6 +96,7 @@ export async function startGame(root: HTMLElement): Promise<Application> {
 
   let frameState: FrameState = { world: createWorld(WORLD_SEED), loop: createFixedStepLoop() };
   let stats = createStatsTracker();
+  let longFrames = createLongFrameTracker();
   let lastFrameTime: number | undefined;
 
   const uncapped = isUncappedRequested();
@@ -71,19 +107,34 @@ export async function startGame(root: HTMLElement): Promise<Application> {
     lastFrameTime = nowMs;
 
     const updateStart = performance.now();
+    const tickCountBefore = frameState.world.tickCount;
     const result = updateFrame(frameState, frameMs);
     frameState = result.state;
-    applyToContainer(cameraInput.getState(), worldContainer, app.screen.width, app.screen.height);
+
+    // NPC é decorativo: não mora em World, não passa por tick(). Mas o
+    // movimento ainda é cadenciado pelo mesmo tick fixo do sim (Regra 3 —
+    // deltaTime não multiplica valor de jogo, e "velocidade constante
+    // independente do frame rate" é o mesmo princípio pra visual). Um passo
+    // de NPC por tick que rodou neste frame, não um passo por frame.
+    const camera = cameraInput.getState();
+    for (let i = 1; i <= result.ticksRan; i++) {
+      stepNpcPool(npcPool, flowField, tickCountBefore + i, camera.x, camera.y);
+    }
+    syncNpcPoolView(npcPoolView, npcPool);
+
+    applyToContainer(camera, worldContainer, app.screen.width, app.screen.height);
     const updateMs = performance.now() - updateStart;
 
     // Reset e leitura no mesmo frame: como somos nós que chamamos app.render()
     // agora (autoStart:false), não há mais defasagem de 1 frame nos draw calls.
     drawCallCounter?.reset();
+    Culler.shared.cull(app.stage, app.renderer.screen);
     const renderStart = performance.now();
     app.render();
     const renderMs = performance.now() - renderStart;
 
     stats = recordFrame(stats, frameMs);
+    longFrames = recordLongFrame(longFrames, frameMs);
     updateDebugOverlay(overlay, {
       fps: instantFps(frameMs),
       low1PercentFps: computeLow1PercentFps(stats),
@@ -97,6 +148,9 @@ export async function startGame(root: HTMLElement): Promise<Application> {
       tickCount: frameState.world.tickCount,
       ticksThisFrame: result.ticksRan,
       backend: app.renderer.name,
+      totalFrames: longFrames.totalFrames,
+      framesOver20ms: longFrames.framesOver20ms,
+      framesOver33ms: longFrames.framesOver33ms,
     });
   }
 

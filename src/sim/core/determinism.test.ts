@@ -40,9 +40,15 @@ describe("determinismo", () => {
   // Um teste de divergência por seed hoje passaria de forma vazia (só porque
   // o campo `seed` em si já é diferente, não porque o RNG foi exercitado de
   // verdade) — e teste vazio que passa é pior que teste ausente, dá confiança
-  // falsa. Ele volta a fazer sentido assim que algum sistema do sim/ consumir
-  // o RNG dentro de tick() — candidato mais provável: spawn/movimento de NPC
-  // na Etapa 4. Quando isso acontecer, reintroduza este teste comparando o
-  // valor derivado do RNG, não o World inteiro (ver histórico do commit da
-  // Etapa 2 para o formato).
+  // falsa.
+  //
+  // CORREÇÃO (Etapa 4): o candidato que este comentário apontava — NPC — não
+  // vai acontecer. render/npc/ é "decorativo" por definição arquitetural
+  // (CLAUDE.md: render/ só LÊ World, nunca escreve; npc/ é "pool de NPCs
+  // decorativos"). NPC nunca toca World nem tick(), e usa Math.random() puro
+  // (permitido fora de sim/) para tint/posição — não a seed do jogo. Este
+  // teste só volta a fazer sentido quando um sistema ECONÔMICO de verdade
+  // (produtividade de trabalhador, flutuação de mercado, evento aleatório)
+  // consumir o RNG dentro de sim/tick() — isso é conteúdo de jogo, então fica
+  // para a Fase 1, não para o resto da Fase 0. Ver docs/DECISOES.md P-01.
 });

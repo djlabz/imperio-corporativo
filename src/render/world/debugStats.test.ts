@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   computeBudgetOccupancyPercent,
   computeLow1PercentFps,
+  createLongFrameTracker,
   createStatsTracker,
   instantFps,
   recordFrame,
+  recordLongFrame,
 } from "./debugStats";
 
 describe("instantFps()", () => {
@@ -100,5 +102,54 @@ describe("computeBudgetOccupancyPercent() — o número que sobrevive ao vsync",
   it("respeita um targetFps diferente do default", () => {
     // A 30fps o orçamento é 33.33ms; gastar 33.33ms de trabalho é 100% dele.
     expect(computeBudgetOccupancyPercent(1000 / 30, 30)).toBeCloseTo(100, 5);
+  });
+});
+
+describe("createLongFrameTracker() / recordLongFrame() — proxy sem ferramenta externa pra pressão de GC", () => {
+  it("frame curto não conta em nenhum limiar", () => {
+    let tracker = createLongFrameTracker();
+    tracker = recordLongFrame(tracker, 10);
+    expect(tracker.totalFrames).toBe(1);
+    expect(tracker.framesOver20ms).toBe(0);
+    expect(tracker.framesOver33ms).toBe(0);
+  });
+
+  it("frame entre 20ms e 33ms conta só no limiar de 20ms", () => {
+    let tracker = createLongFrameTracker();
+    tracker = recordLongFrame(tracker, 25);
+    expect(tracker.framesOver20ms).toBe(1);
+    expect(tracker.framesOver33ms).toBe(0);
+  });
+
+  it("frame acima de 33ms conta nos dois limiares — perdeu dois frames a 60Hz, não só um", () => {
+    let tracker = createLongFrameTracker();
+    tracker = recordLongFrame(tracker, 40);
+    expect(tracker.framesOver20ms).toBe(1);
+    expect(tracker.framesOver33ms).toBe(1);
+  });
+
+  it("frame bem no limiar (exatamente 20ms) não conta — é estritamente maior que", () => {
+    let tracker = createLongFrameTracker();
+    tracker = recordLongFrame(tracker, 20);
+    expect(tracker.framesOver20ms).toBe(0);
+  });
+
+  it("acumula ao longo de várias chamadas, sem perder contagem anterior", () => {
+    let tracker = createLongFrameTracker();
+    for (const frameMs of [10, 25, 40, 15, 50]) {
+      tracker = recordLongFrame(tracker, frameMs);
+    }
+    expect(tracker.totalFrames).toBe(5);
+    expect(tracker.framesOver20ms).toBe(3); // 25, 40, 50
+    expect(tracker.framesOver33ms).toBe(2); // 40, 50
+  });
+
+  it("janela fixa: não é uma janela deslizante — não descarta amostras antigas como recordFrame() faz", () => {
+    let tracker = createLongFrameTracker();
+    for (let i = 0; i < 500; i++) {
+      tracker = recordLongFrame(tracker, 40);
+    }
+    expect(tracker.totalFrames).toBe(500);
+    expect(tracker.framesOver33ms).toBe(500); // nenhuma foi esquecida
   });
 });

@@ -14,6 +14,9 @@ const BASE_SNAPSHOT: OverlaySnapshot = {
   tickCount: 1234,
   ticksThisFrame: 1,
   backend: "webgl",
+  totalFrames: 1800,
+  framesOver20ms: 3,
+  framesOver33ms: 1,
 };
 
 describe("formatOverlayText()", () => {
@@ -62,6 +65,12 @@ describe("formatOverlayText()", () => {
     const text = formatOverlayText({ ...BASE_SNAPSHOT, drawCalls: 0 });
     expect(text).toContain("Draw calls: 0");
     expect(text).not.toContain("n/d");
+  });
+
+  it("mostra a contagem de frames longos nos dois limiares, sobre o total", () => {
+    const text = formatOverlayText(BASE_SNAPSHOT);
+    expect(text).toContain("Frames >20ms: 3/1800");
+    expect(text).toContain(">33ms: 1/1800");
   });
 });
 

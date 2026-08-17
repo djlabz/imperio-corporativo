@@ -24,6 +24,10 @@ export interface OverlaySnapshot {
   readonly ticksThisFrame: number;
   /** 'webgl' | 'webgpu' | 'canvas' — o Pixi escolhe sozinho; muda a leitura dos outros números. */
   readonly backend: string;
+  /** Contagem cumulativa de frames longos desde o carregamento — proxy de GC sem profiler externo. */
+  readonly totalFrames: number;
+  readonly framesOver20ms: number;
+  readonly framesOver33ms: number;
 }
 
 /** Formatação pura, sem Pixi — testável sem precisar de um Text real. */
@@ -40,6 +44,7 @@ export function formatOverlayText(snapshot: OverlaySnapshot): string {
     `Heap JS: ${heap}`,
     `Tick: ${snapshot.tickCount}  (+${snapshot.ticksThisFrame} neste frame)`,
     `Backend: ${snapshot.backend}`,
+    `Frames >20ms: ${snapshot.framesOver20ms}/${snapshot.totalFrames}  >33ms: ${snapshot.framesOver33ms}/${snapshot.totalFrames}`,
   ].join("\n");
 }
 

@@ -33,28 +33,16 @@ describe("determinismo", () => {
     }
   });
 
-  it("seeds diferentes produzem sequências de ruído diferentes", () => {
-    // Não compara os World inteiros: o campo `seed` por si só já os deixaria
-    // diferentes mesmo que o RNG estivesse quebrado e ignorasse a seed. O que
-    // importa é o valor DERIVADO do RNG (`noise`) realmente divergir.
-    let worldA: World = createWorld("seed-um");
-    let worldB: World = createWorld("seed-dois");
-
-    const noiseA: number[] = [];
-    const noiseB: number[] = [];
-    for (let i = 0; i < TICKS; i++) {
-      worldA = tick(worldA);
-      worldB = tick(worldB);
-      noiseA.push(worldA.noise);
-      noiseB.push(worldB.noise);
-    }
-
-    expect(noiseA).not.toEqual(noiseB);
-
-    // Controle extra: mesmo que as sequências não sejam idênticas ponto a
-    // ponto, um RNG quase-quebrado poderia colidir em uma fração suspeita de
-    // posições. Com dois floats de verdade a colisão exata é ~0.
-    const identicalCount = noiseA.filter((value, i) => value === noiseB[i]).length;
-    expect(identicalCount).toBe(0);
-  });
+  // O teste "seeds diferentes produzem resultados diferentes" que existia
+  // aqui na Etapa 2 foi removido de propósito nesta etapa, junto com o campo
+  // World.noise que ele exercitava. Sem esse campo, nada em World depende da
+  // seed depois da criação — tick() virou de novo um simples tickCount + 1.
+  // Um teste de divergência por seed hoje passaria de forma vazia (só porque
+  // o campo `seed` em si já é diferente, não porque o RNG foi exercitado de
+  // verdade) — e teste vazio que passa é pior que teste ausente, dá confiança
+  // falsa. Ele volta a fazer sentido assim que algum sistema do sim/ consumir
+  // o RNG dentro de tick() — candidato mais provável: spawn/movimento de NPC
+  // na Etapa 4. Quando isso acontecer, reintroduza este teste comparando o
+  // valor derivado do RNG, não o World inteiro (ver histórico do commit da
+  // Etapa 2 para o formato).
 });

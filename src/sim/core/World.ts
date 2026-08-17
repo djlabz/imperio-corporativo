@@ -11,13 +11,6 @@ export interface World {
   readonly rngState: RngState;
   readonly tickCount: number;
   readonly money: Money;
-  /**
-   * Escalar descartável que só existe para o tick() consumir aleatoriedade de
-   * verdade nesta etapa (senão o teste de determinismo passaria mesmo com o
-   * RNG quebrado, já que tickCount por si só é determinístico). Sai da árvore
-   * quando a Etapa 3 trouxer conteúdo real que consuma o Rng.
-   */
-  readonly noise: number;
 }
 
 const INITIAL_VERSION = 1;
@@ -31,6 +24,5 @@ export function createWorld(seed: string): World {
     rngState: rng.getState(),
     tickCount: 0,
     money: centavos(0),
-    noise: 0,
   };
 }

@@ -311,3 +311,19 @@ intacta, mas perder o WSL naquele momento apagaria o projeto.
 | P-04 | Instrumentação de custo real de frame (vsync mascara o número) | Antes da Etapa 4 — ver D-005, é o que valida a decisão de engine |
 | P-05 | Skills `brainstorming` + `writing-plans`, vendoradas | Início da Fase 1 |
 | P-06 | Surto de frames longos no aquecimento, escalando com N (26 frames a 2000 NPCs, 160 a 4000), estabilizando em 6–18s sem resíduo. Hipótese não confirmada: alocação por respawn em `randomEdgePoint()`. Correção candidata: escrever direto em x/y em vez de retornar `{x, y}` | Se o surto aparecer com N ≤ 600 (o teto de pool real), ou se o `.exe` nativo da Etapa 6 mostrar comportamento pior |
+
+---
+
+## Estado atual
+
+**Fase 0 (spike técnico) — Etapas 1 a 5 concluídas:**
+
+1. Scaffolding + travas de pureza do `sim/` automatizadas no oxlint
+2. Núcleo de simulação (rng, World, tick, money, loop de passo fixo)
+3. Mapa top-down, câmera, instrumentação de performance que sobrevive ao vsync
+4. NPCs decorativos — 500 a 60fps com folga real, escala linear medida até 4000
+5. Save/load — pipeline completo, HMAC, migração, RNG sobrevivendo à serialização real
+
+**Pendente:** Etapa 6 (Electron). É a que valida D-005 de verdade — com `.exe`
+nativo no Windows, fora do WSL. Até lá, a decisão de engine segue com risco
+assumido, não risco medido no ambiente que importa (ver adendo em D-005).

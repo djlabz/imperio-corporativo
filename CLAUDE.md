@@ -126,6 +126,7 @@ src/
 | Lint | **oxlint** (não ESLint) |
 | Formatação | Prettier |
 | Save | `@msgpack/msgpack` + `fflate` + `zod` |
+| Teste de save | `fake-indexeddb` (devDependency — cobertura real do `IndexedDbSaveAdapter`, não só verificação manual) |
 | RNG | `seedrandom` |
 | Desktop | Electron + electron-builder |
 
@@ -155,6 +156,44 @@ física, não traga ECS, não traga state manager global. Não precisamos.
 stack web (TypeScript + PixiJS + Electron). O risco assumido é GC/engasgo de
 frame; a Etapa 4 (500 NPCs a 60fps) é o teste que valida ou invalida essa
 decisão. Decisão registrada não se rediscute por impulso.
+
+---
+
+## Armadilhas conhecidas do ambiente
+
+Achados na Etapa 5 que custaram tempo real de debug — registrados pra não
+serem redescobertos.
+
+**`Uint8Array` cru não serve como `BufferSource` do Web Crypto.** A partir do
+TypeScript 5.7, todo typed array (`Uint8Array` incluso) é genérico sobre
+`ArrayBufferLike` (`Uint8Array<TArrayBuffer extends ArrayBufferLike =
+ArrayBufferLike>`), e uma anotação de tipo `Uint8Array` sem argumento resolve
+pro default `ArrayBufferLike`. `BufferSource` (o que `crypto.subtle.sign` /
+`.verify` / `.importKey` / `.deriveBits` pedem) só aceita
+`Uint8Array<ArrayBuffer>` especificamente — `ArrayBufferLike` inclui
+`SharedArrayBuffer`, que não é aceito. Sem um alias `type Bytes =
+Uint8Array<ArrayBuffer>` nas assinaturas de função que tocam `crypto.subtle`,
+nada disso compila. Confirmado no `tsc` deste projeto: `typescript` está em
+`7.0.2` (ver `package.json`), versão que já carrega esse comportamento desde
+que foi introduzido no 5.7 — não é um workaround copiado de outra versão.
+
+**Fake timers do Vitest não aceleram `crypto.subtle`.** PBKDF2 (usado pra
+derivar as chaves de save) roda no thread pool real do Node via libuv, não
+como microtask — `vi.advanceTimersByTimeAsync()` nunca resolve a Promise
+correspondente, e o teste trava esperando algo que não vai acontecer dentro
+do tempo fake. A saída é injetar a função que faz o trabalho assíncrono
+pesado (mesmo padrão de `random`/`now` injetáveis já usado em `npcPool.ts` e
+`saveGame.ts`), e testar só o AGENDAMENTO com uma versão rápida e falsa dela.
+
+**`NaN` e `Infinity` sobrevivem ao MessagePack sem guarda nenhuma.**
+`@msgpack/msgpack` codifica e decodifica os dois exatamente como são — não
+há erro, não há substituição por `null`. Um save adulterado pode injetar
+qualquer um dos dois num campo numérico livremente se o schema de validação
+não excluir isso explicitamente. `z.int()` do zod exclui ambos por
+construção (não é inteiro nem finito); `z.number()` sozinho aceitaria os
+dois como válidos. Não troque `z.int()` por `z.number()` em campo numérico
+de save sem repor essa guarda — `NaN` em `Money`, por exemplo, se propaga por
+toda soma/subtração subsequente e contamina o estado inteiro em silêncio.
 
 ---
 

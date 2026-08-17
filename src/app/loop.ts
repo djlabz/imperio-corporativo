@@ -1,3 +1,11 @@
+// Este arquivo não importa sim/ de propósito. A matemática do acumulador é
+// testada com deltas falsos e zero setup (ver loop.test.ts); se importasse
+// World/tick(), todo teste da matemática pura passaria a exigir um World
+// montado. frame.ts é quem aplica isto ao World deste jogo especificamente
+// — mantidos em arquivos separados por isso, não por "reuso futuro" (não
+// vamos reusar). Não funda os dois "pra simplificar": o atrito de testar o
+// acumulador isolado é o que se perde.
+
 /** Duração fixa de um tick de simulação, em ms. Ver Regra 3 do CLAUDE.md. */
 export const TICK_MS = 100;
 

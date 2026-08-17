@@ -1,26 +1,44 @@
+import type { ElectronSaveApi } from "../electron/electronSaveApi";
 import type { SaveAdapter } from "./SaveAdapter";
 
-const NOT_IMPLEMENTED = "ElectronSaveAdapter ainda não implementado — chega na Etapa 6.";
+declare global {
+  interface Window {
+    /** Exposto por preload.cts via contextBridge — só existe dentro do Electron. */
+    electronSave?: ElectronSaveApi;
+  }
+}
 
 /**
- * Stub — implementação real via IPC do Electron (filesystem) chega na
- * Etapa 6. Lança em toda chamada, de propósito: um adapter que finge
- * funcionar e perde o save do jogador é pior que um erro alto agora.
+ * Implementação real via IPC do Electron (filesystem em app.getPath('userData')).
+ * Delega tudo pra `window.electronSave`, exposto pelo preload com
+ * contextIsolation — este arquivo nunca toca `require`/`fs` diretamente,
+ * porque roda no processo do renderer, não no main.
  */
 export class ElectronSaveAdapter implements SaveAdapter {
-  write(): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
+  private readonly api: ElectronSaveApi;
+
+  constructor() {
+    if (!window.electronSave) {
+      throw new Error(
+        "window.electronSave indisponível — ElectronSaveAdapter só funciona dentro do Electron, com o preload carregado.",
+      );
+    }
+    this.api = window.electronSave;
   }
 
-  read(): Promise<Uint8Array | undefined> {
-    throw new Error(NOT_IMPLEMENTED);
+  write(key: string, data: Uint8Array): Promise<void> {
+    return this.api.write(key, data);
+  }
+
+  read(key: string): Promise<Uint8Array | undefined> {
+    return this.api.read(key);
   }
 
   list(): Promise<string[]> {
-    throw new Error(NOT_IMPLEMENTED);
+    return this.api.list();
   }
 
-  remove(): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED);
+  remove(key: string): Promise<void> {
+    return this.api.remove(key);
   }
 }

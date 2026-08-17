@@ -128,7 +128,7 @@ src/
 | Save | `@msgpack/msgpack` + `fflate` + `zod` |
 | Teste de save | `fake-indexeddb` (devDependency — cobertura real do `IndexedDbSaveAdapter`, não só verificação manual) |
 | RNG | `seedrandom` |
-| Desktop | Electron + electron-builder |
+| Desktop | Electron 43 + electron-builder 26 (`.cts` pro main/preload — ver Armadilhas) |
 
 **Nota sobre gerenciador de pacotes:** pnpm pelo store com hardlinks (economia de
 disco e velocidade). **Obrigatório** ter na raiz um `.npmrc` com:
@@ -161,8 +161,8 @@ decisão. Decisão registrada não se rediscute por impulso.
 
 ## Armadilhas conhecidas do ambiente
 
-Achados na Etapa 5 que custaram tempo real de debug — registrados pra não
-serem redescobertos.
+Achados nas Etapas 5 e 6 que custaram tempo real de debug — registrados pra
+não serem redescobertos.
 
 **`Uint8Array` cru não serve como `BufferSource` do Web Crypto.** A partir do
 TypeScript 5.7, todo typed array (`Uint8Array` incluso) é genérico sobre
@@ -194,6 +194,52 @@ construção (não é inteiro nem finito); `z.number()` sozinho aceitaria os
 dois como válidos. Não troque `z.int()` por `z.number()` em campo numérico
 de save sem repor essa guarda — `NaN` em `Money`, por exemplo, se propaga por
 toda soma/subtração subsequente e contamina o estado inteiro em silêncio.
+
+**Vite emite asset em caminho absoluto por padrão — quebra sob `file://`.**
+`base: "/"` (default do Vite) gera `<script src="/assets/...">`. Servido por
+http isso é relativo à raiz do site, funciona. Carregado via
+`BrowserWindow.loadFile()` (protocolo `file://`, sem servidor), `/assets/...`
+resolve pra raiz do FILESYSTEM, não pra pasta do `index.html` — o bundle
+inteiro falha em carregar. A falha é silenciosa do jeito mais enganoso
+possível: `loadFile()` resolve normalmente (achou o HTML), a janela abre, e
+só o jogo nunca inicializa. `base: "./"` (relativo) resolve nos dois
+protocolos — sempre usar isso em projeto que carrega via Electron `loadFile`.
+
+**`tsconfig` com `extends` herda o `exclude` do pai.** Um subprojeto
+(`src/platform/electron/tsconfig.json`) que precisa compilar exatamente os
+arquivos que o tsconfig raiz exclui (main/preload do Electron — ver abaixo)
+herda esse exclude automaticamente se não declarar o seu próprio. Resultado:
+o subprojeto compila um programa vazio — `tsc --noEmit` passa limpo (nada pra
+checar) e `tsc` sem `--noEmit` não emite nada, os dois em silêncio, sem erro
+nenhum. `"exclude": []` explícito no filho é obrigatório sempre que o filho
+existe pra cobrir o que o pai deliberadamente deixou de fora.
+
+**Main/preload do Electron como `.cts`, não `.ts`.** Este projeto é ESM
+(`"type": "module"`) com `verbatimModuleSyntax: true`. O processo main do
+Electron roda em CommonJS de fato. Arquivo `.cts` força emissão CommonJS
+(`.cjs`) independente do `module` do tsconfig — mas só funciona de verdade
+com `module`/`moduleResolution` em `NodeNext` (o `Node10` clássico foi
+**removido** no TypeScript 7). E com `verbatimModuleSyntax` ligado, import de
+VALOR num `.cts` não aceita sintaxe ESM (`import { x } from "y"`) — só
+`import x = require("y")`; `import type` continua em sintaxe normal (é
+apagado na emissão, não tem formato de módulo pra desambiguar). Destructurar
+um valor de dentro de um `import = require()` (ex.: `const { BrowserWindow }
+= electron`) funciona como valor mas não serve como anotação de tipo — precisa
+de `import type { BrowserWindow as X } from "electron"` à parte.
+
+**`.exe` empacotado (subsistema "windows") não tem console.** `console.log`
+no processo main de um build Electron distribuído desaparece — não há
+terminal anexado. Única saída confiável pra depurar é escrever em arquivo
+(`app.getPath('userData')/debug.log` ou similar), incluindo o forwarding do
+evento `webContents.on('console-message', ...)` pra capturar erros do lado do
+renderer também.
+
+**WSL2 (`/mnt/c/...`) pode mostrar visão desatualizada de arquivo escrito por
+processo Windows nativo** (não um processo iniciado a partir do WSL). `ls`/
+`cat`/`find` direto em `/mnt/c` logo depois do processo terminar pode não
+ver o arquivo, mesmo ele existindo de verdade — cache de metadata do DrvFs.
+Ler de dentro do Windows (`powershell.exe -Command "Get-Content ..."`) é
+confiável; `/mnt/c` do lado WSL, logo após a escrita, não é.
 
 ---
 

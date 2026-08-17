@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "outDir": "../../../dist-electron",
+    "rootDir": "."
+  },
+  // `extends` herda o "exclude" do tsconfig raiz por padrão — e esse exclude
+  // é justamente main.cts/preload.cts (ver comentário lá). Sem sobrescrever
+  // aqui, este subprojeto excluiria os dois únicos arquivos que precisa
+  // compilar — typecheck passaria limpo (nada pra checar) e build:win teria
+  // dist-electron/ vazio, um jeito silencioso de "funcionar" sem funcionar.
+  "exclude": [],
+  "include": ["main.cts", "preload.cts", "electronSaveApi.ts"]
+}

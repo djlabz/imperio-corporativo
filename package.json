@@ -4,21 +4,27 @@
   "private": true,
   "type": "module",
   "description": "Simulador de Império Corporativo — jogo de gerenciamento empresarial",
+  "author": "Daniel Oliveira",
   "packageManager": "pnpm@11.22.0",
+  "main": "dist-electron/main.cjs",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p src/platform/electron/tsconfig.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/platform/electron/tsconfig.json",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "postinstall": "electron-builder install-app-deps",
+    "electron:build-main": "tsc -p src/platform/electron/tsconfig.json",
+    "dev:electron": "pnpm electron:build-main && vite build && electron .",
+    "build:win": "pnpm electron:build-main && vite build && electron-builder --win --dir"
   },
   "dependencies": {
     "@msgpack/msgpack": "3.1.3",
@@ -30,11 +36,36 @@
   "devDependencies": {
     "@types/node": "26.2.0",
     "@types/seedrandom": "3.0.8",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
     "fake-indexeddb": "6.2.5",
     "oxlint": "1.78.0",
     "prettier": "3.9.6",
     "typescript": "7.0.2",
     "vite": "8.2.1",
     "vitest": "4.1.10"
+  },
+  "build": {
+    "appId": "com.imperiocorporativo.app",
+    "productName": "imperio-corporativo",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir"
+        }
+      ],
+      "signAndEditExecutable": false
+    }
   }
 }

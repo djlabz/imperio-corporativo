@@ -20,5 +20,13 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test", "vite.config.ts"]
+  "include": ["src", "test", "vite.config.ts"],
+  "exclude": [
+    // main.cts/preload.cts são CommonJS de verdade (ver .cts) — só compilam
+    // sob module:CommonJS + moduleResolution:Node10, o que este projeto (ESM,
+    // bundler) não é. Checados à parte por src/platform/electron/tsconfig.json;
+    // os scripts typecheck/build rodam os dois. Mesmo padrão que P-02 já prevê
+    // pra src/sim/ com noUncheckedIndexedAccess: dois tsconfigs, um script.
+    "src/platform/electron/*.cts"
+  ]
 }

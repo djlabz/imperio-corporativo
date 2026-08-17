@@ -1,0 +1,5 @@
+allowBuilds:
+  # electron-winstaller monta instalador Squirrel.Windows — fora do escopo da
+  # Etapa 6 (build:win usa --dir, sem instalador). Sem postinstall dele, nada
+  # que este projeto usa hoje precisa.
+  electron-winstaller: false

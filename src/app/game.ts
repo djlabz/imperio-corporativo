@@ -4,6 +4,7 @@ import {
   createDebugOverlay,
   readHeapMB,
   updateDebugOverlay,
+  type OverlaySnapshot,
 } from "../render/debug/DebugOverlayView";
 import { buildFlowField } from "../render/npc/flowField";
 import { buildNpcPoolView, syncNpcPoolView } from "../render/npc/NpcPoolView";
@@ -21,10 +22,26 @@ import {
 } from "../render/world/debugStats";
 import { buildTileGrid, WORLD_HEIGHT, WORLD_WIDTH } from "../render/world/tileMap";
 import { buildTileMapView } from "../render/world/TileMapView";
+import { ElectronSaveAdapter } from "../platform/save/ElectronSaveAdapter";
+import { IndexedDbSaveAdapter } from "../platform/save/IndexedDbSaveAdapter";
+import { loadLatestWorld, saveWorld } from "../platform/save/saveGame";
+import type { SaveAdapter } from "../platform/save/SaveAdapter";
 import { createWorld } from "../sim/core/World";
 import { updateFrame, type FrameState } from "./frame";
 import { createFixedStepLoop } from "./loop";
 import { createUncappedScheduler, createVsyncScheduler } from "./frameScheduler";
+
+declare global {
+  interface Window {
+    /**
+     * Último OverlaySnapshot, sempre atualizado — não só em modo de benchmark.
+     * É o que main.cts lê via `executeJavaScript` na Parte B da Etapa 6 (ver
+     * docs/DECISOES.md), e o mesmo canal serve pra inspeção manual via
+     * DevTools. Debug hook deliberado, não vazamento: não influencia o jogo.
+     */
+    __benchStats?: OverlaySnapshot;
+  }
+}
 
 const BACKGROUND_COLOR = 0x1a1a1a;
 const WORLD_SEED = "etapa-3";
@@ -99,6 +116,33 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   let longFrames = createLongFrameTracker();
   let lastFrameTime: number | undefined;
 
+  // window.electronSave só existe dentro do Electron (exposto pelo preload).
+  // No browser puro (dev via Vite, ou build web), cai no IndexedDB — os dois
+  // adapters coexistem, ver CLAUDE.md/Save game.
+  const saveAdapter: SaveAdapter = window.electronSave
+    ? new ElectronSaveAdapter()
+    : new IndexedDbSaveAdapter();
+
+  // Gatilho manual de save/load pra validar o pipeline através do adapter de
+  // filesystem no .exe nativo (Parte B da Etapa 6) — não há UI ainda
+  // (src/ui/ vazio na Fase 0). S salva o World atual; L carrega o mais
+  // recente e substitui frameState.world, preservando o loop (o acumulador
+  // de tempo real não faz parte do contrato de determinismo).
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "s") {
+      saveWorld(saveAdapter, frameState.world)
+        .then(() => console.log(`save ok — tick ${frameState.world.tickCount}`))
+        .catch((error: unknown) => console.error("save falhou:", error));
+    } else if (event.key === "l") {
+      loadLatestWorld(saveAdapter)
+        .then((world) => {
+          frameState = { ...frameState, world };
+          console.log(`load ok — tick ${world.tickCount}`);
+        })
+        .catch((error: unknown) => console.error("load falhou:", error));
+    }
+  });
+
   const uncapped = isUncappedRequested();
   const scheduler = uncapped ? createUncappedScheduler() : createVsyncScheduler();
 
@@ -135,7 +179,7 @@ export async function startGame(root: HTMLElement): Promise<Application> {
 
     stats = recordFrame(stats, frameMs);
     longFrames = recordLongFrame(longFrames, frameMs);
-    updateDebugOverlay(overlay, {
+    const snapshot: OverlaySnapshot = {
       fps: instantFps(frameMs),
       low1PercentFps: computeLow1PercentFps(stats),
       frameMs,
@@ -151,7 +195,9 @@ export async function startGame(root: HTMLElement): Promise<Application> {
       totalFrames: longFrames.totalFrames,
       framesOver20ms: longFrames.framesOver20ms,
       framesOver33ms: longFrames.framesOver33ms,
-    });
+    };
+    updateDebugOverlay(overlay, snapshot);
+    window.__benchStats = snapshot;
   }
 
   scheduler.start(runFrame);

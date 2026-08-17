@@ -237,3 +237,4 @@ O objetivo é atrito contra edição casual, nada além disso.
 - Se precisar violar uma regra invioláve, pare e pergunte. Não contorne em silêncio.
 - Quando terminar uma etapa, diga explicitamente o que foi feito e o que ficou
   pendente.
+- Ao fim de cada etapa: commit **e** push. Não deixe trabalho só no local.

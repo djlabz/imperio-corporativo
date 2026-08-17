@@ -30,6 +30,7 @@
   "devDependencies": {
     "@types/node": "26.2.0",
     "@types/seedrandom": "3.0.8",
+    "fake-indexeddb": "6.2.5",
     "oxlint": "1.78.0",
     "prettier": "3.9.6",
     "typescript": "7.0.2",

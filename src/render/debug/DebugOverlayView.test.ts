@@ -5,6 +5,10 @@ const BASE_SNAPSHOT: OverlaySnapshot = {
   fps: 60,
   low1PercentFps: 58,
   frameMs: 16.67,
+  updateMs: 0.05,
+  renderMs: 1.2,
+  budgetOccupancyPercent: 7.5,
+  uncapped: false,
   drawCalls: 3,
   heapMB: 42.5,
   tickCount: 1234,
@@ -23,6 +27,23 @@ describe("formatOverlayText()", () => {
     expect(text).toContain("Tick: 1234");
     expect(text).toContain("+1 neste frame");
     expect(text).toContain("Backend: webgl");
+  });
+
+  it("mostra update, render e ocupação de orçamento separados do frame total", () => {
+    const text = formatOverlayText(BASE_SNAPSHOT);
+    expect(text).toContain("update: 0.05ms");
+    expect(text).toContain("render: 1.20ms");
+    expect(text).toContain("Orçamento (60fps): 7.5%");
+  });
+
+  it("indica o modo vsync/sem vsync", () => {
+    expect(formatOverlayText({ ...BASE_SNAPSHOT, uncapped: false })).toContain("[vsync]");
+    expect(formatOverlayText({ ...BASE_SNAPSHOT, uncapped: true })).toContain("[sem vsync]");
+  });
+
+  it("ocupação pode passar de 100% — isto é informação, não um erro de formatação", () => {
+    const text = formatOverlayText({ ...BASE_SNAPSHOT, budgetOccupancyPercent: 214.3 });
+    expect(text).toContain("214.3%");
   });
 
   it("mostra n/d quando draw calls está indisponível, sem quebrar formatação", () => {

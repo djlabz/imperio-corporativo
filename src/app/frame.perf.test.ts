@@ -27,6 +27,11 @@ import { createFixedStepLoop } from "./loop";
  * mediana medida — folga de propósito para não flakar em CI mais lento, mas
  * ainda apertado o suficiente pra pegar uma regressão real (ex.: alguém
  * clonando o array de tiles ou serializando o World a cada frame).
+ *
+ * O custo de app.render() em si (que este teste não mede — ver acima) agora
+ * é medido ao vivo pelo overlay de debug (updateMs/renderMs/ocupação de
+ * orçamento em game.ts), com um modo sem vsync para ver headroom real em vez
+ * do FPS mascarado pelo refresh do monitor. Ver DebugOverlayView.ts.
  */
 const FRAME_BUDGET_MS = 2;
 const WORST_CASE_FRAME_MS = 250; // o clamp do loop — o maior frame que o acumulador aceita

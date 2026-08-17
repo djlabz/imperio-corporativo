@@ -4,6 +4,18 @@ export interface OverlaySnapshot {
   readonly fps: number;
   readonly low1PercentFps: number;
   readonly frameMs: number;
+  /**
+   * Custo de CPU da fase de atualização (advance+tick+câmera), medido à
+   * parte do render — sem isso, FPS/frame-time sob vsync não distinguem
+   * "sobrou 15ms de folga" de "sobrou 0.1ms".
+   */
+  readonly updateMs: number;
+  /** Custo de CPU da chamada app.render(). Não é tempo de GPU — ver drawCallCounter.ts para o porquê. */
+  readonly renderMs: number;
+  /** (updateMs+renderMs) como % do orçamento de 60fps. Pode passar de 100%. */
+  readonly budgetOccupancyPercent: number;
+  /** true = ticker rodando solto (sem vsync); false = preso ao refresh do monitor. */
+  readonly uncapped: boolean;
   /** undefined = indisponível (backend não é WebGL, ou o hook falhou). */
   readonly drawCalls: number | undefined;
   /** undefined = indisponível (só Chrome expõe performance.memory). */
@@ -18,10 +30,12 @@ export interface OverlaySnapshot {
 export function formatOverlayText(snapshot: OverlaySnapshot): string {
   const drawCalls = snapshot.drawCalls !== undefined ? String(snapshot.drawCalls) : "n/d";
   const heap = snapshot.heapMB !== undefined ? `${snapshot.heapMB.toFixed(1)}MB` : "n/d";
+  const mode = snapshot.uncapped ? "sem vsync" : "vsync";
 
   return [
-    `FPS: ${snapshot.fps.toFixed(0)}  (1% low: ${snapshot.low1PercentFps.toFixed(0)})`,
-    `Frame: ${snapshot.frameMs.toFixed(2)}ms`,
+    `FPS: ${snapshot.fps.toFixed(0)}  (1% low: ${snapshot.low1PercentFps.toFixed(0)})  [${mode}]`,
+    `Frame: ${snapshot.frameMs.toFixed(2)}ms  (update: ${snapshot.updateMs.toFixed(2)}ms, render: ${snapshot.renderMs.toFixed(2)}ms)`,
+    `Orçamento (60fps): ${snapshot.budgetOccupancyPercent.toFixed(1)}%`,
     `Draw calls: ${drawCalls}`,
     `Heap JS: ${heap}`,
     `Tick: ${snapshot.tickCount}  (+${snapshot.ticksThisFrame} neste frame)`,

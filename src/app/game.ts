@@ -8,6 +8,7 @@ import {
 import { applyToContainer, createCameraState } from "../render/world/camera";
 import { attachCameraInput } from "../render/world/cameraInput";
 import {
+  computeBudgetOccupancyPercent,
   computeLow1PercentFps,
   createStatsTracker,
   instantFps,
@@ -18,15 +19,27 @@ import { buildTileMapView } from "../render/world/TileMapView";
 import { createWorld } from "../sim/core/World";
 import { updateFrame, type FrameState } from "./frame";
 import { createFixedStepLoop } from "./loop";
+import { createUncappedScheduler, createVsyncScheduler } from "./frameScheduler";
 
 const BACKGROUND_COLOR = 0x1a1a1a;
 const WORLD_SEED = "etapa-3";
+
+/**
+ * ?uncapped na URL desliga o vsync: o loop roda solto (ver frameScheduler.ts).
+ * É o único jeito de ver headroom real — sob vsync, FPS fica preso no
+ * refresh do monitor e não distingue "sobrou 15ms de folga" de "sobrou
+ * 0.1ms". Ver também: Orçamento (60fps) no overlay, que não depende disso.
+ */
+function isUncappedRequested(): boolean {
+  return new URLSearchParams(window.location.search).has("uncapped");
+}
 
 export async function startGame(root: HTMLElement): Promise<Application> {
   const app = new Application();
   await app.init({
     resizeTo: root,
     background: BACKGROUND_COLOR,
+    autoStart: false,
   });
   root.appendChild(app.canvas);
 
@@ -48,31 +61,46 @@ export async function startGame(root: HTMLElement): Promise<Application> {
 
   let frameState: FrameState = { world: createWorld(WORLD_SEED), loop: createFixedStepLoop() };
   let stats = createStatsTracker();
+  let lastFrameTime: number | undefined;
 
-  app.ticker.add(() => {
-    // Draw calls do frame anterior: o contador zera aqui, e o render deste
-    // frame só acontece depois, fora do nosso controle direto.
-    const drawCallsLastFrame = drawCallCounter?.count;
-    drawCallCounter?.reset();
+  const uncapped = isUncappedRequested();
+  const scheduler = uncapped ? createUncappedScheduler() : createVsyncScheduler();
 
-    const frameMs = app.ticker.elapsedMS;
+  function runFrame(nowMs: number): void {
+    const frameMs = lastFrameTime === undefined ? 0 : nowMs - lastFrameTime;
+    lastFrameTime = nowMs;
+
+    const updateStart = performance.now();
     const result = updateFrame(frameState, frameMs);
     frameState = result.state;
-
     applyToContainer(cameraInput.getState(), worldContainer, app.screen.width, app.screen.height);
+    const updateMs = performance.now() - updateStart;
+
+    // Reset e leitura no mesmo frame: como somos nós que chamamos app.render()
+    // agora (autoStart:false), não há mais defasagem de 1 frame nos draw calls.
+    drawCallCounter?.reset();
+    const renderStart = performance.now();
+    app.render();
+    const renderMs = performance.now() - renderStart;
 
     stats = recordFrame(stats, frameMs);
     updateDebugOverlay(overlay, {
       fps: instantFps(frameMs),
       low1PercentFps: computeLow1PercentFps(stats),
       frameMs,
-      drawCalls: drawCallsLastFrame,
+      updateMs,
+      renderMs,
+      budgetOccupancyPercent: computeBudgetOccupancyPercent(updateMs + renderMs),
+      uncapped,
+      drawCalls: drawCallCounter?.count,
       heapMB: readHeapMB(),
       tickCount: frameState.world.tickCount,
       ticksThisFrame: result.ticksRan,
       backend: app.renderer.name,
     });
-  });
+  }
+
+  scheduler.start(runFrame);
 
   return app;
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { computeLow1PercentFps, createStatsTracker, instantFps, recordFrame } from "./debugStats";
+import {
+  computeBudgetOccupancyPercent,
+  computeLow1PercentFps,
+  createStatsTracker,
+  instantFps,
+  recordFrame,
+} from "./debugStats";
 
 describe("instantFps()", () => {
   it("16.66ms de frame dá ~60fps", () => {
@@ -70,5 +76,29 @@ describe("computeLow1PercentFps() — o pior 1%, não a média", () => {
     for (let i = 0; i < 49; i++) tracker = recordFrame(tracker, 16);
 
     expect(computeLow1PercentFps(tracker)).toBeCloseTo(instantFps(1000), 5);
+  });
+});
+
+describe("computeBudgetOccupancyPercent() — o número que sobrevive ao vsync", () => {
+  it("gastar o orçamento inteiro de 60fps dá 100%", () => {
+    expect(computeBudgetOccupancyPercent(1000 / 60, 60)).toBeCloseTo(100, 5);
+  });
+
+  it("gastar metade do orçamento dá 50%", () => {
+    expect(computeBudgetOccupancyPercent(1000 / 120, 60)).toBeCloseTo(50, 5);
+  });
+
+  it("sem gastar nada dá 0%", () => {
+    expect(computeBudgetOccupancyPercent(0, 60)).toBe(0);
+  });
+
+  it("passar do orçamento dá mais de 100% — isto é o ponto: vsync escode isso, ocupação não", () => {
+    // 33ms de trabalho por frame, mas o alvo é 16.67ms (60fps): já não cabe.
+    expect(computeBudgetOccupancyPercent(33.33, 60)).toBeGreaterThan(100);
+  });
+
+  it("respeita um targetFps diferente do default", () => {
+    // A 30fps o orçamento é 33.33ms; gastar 33.33ms de trabalho é 100% dele.
+    expect(computeBudgetOccupancyPercent(1000 / 30, 30)).toBeCloseTo(100, 5);
   });
 });

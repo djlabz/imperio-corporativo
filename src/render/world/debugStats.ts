@@ -35,3 +35,21 @@ export function computeLow1PercentFps(tracker: StatsTracker): number {
 
   return instantFps(avgWorstMs);
 }
+
+const DEFAULT_TARGET_FPS = 60;
+
+/**
+ * Quanto do orçamento de frame (1000/targetFps ms) o trabalho medido ocupou,
+ * em %. Sob vsync, FPS fica preso no refresh rate e não distingue "sobrou
+ * 15ms de folga" de "sobrou 0.1ms" — os dois mostram o mesmo 60fps. Ocupação
+ * não tem esse problema: mede o trabalho em si, não quantos frames couberam
+ * num segundo. Pode passar de 100% (significa que o trabalho não cabe mais
+ * no orçamento, mesmo que o vsync ainda esconda isso no FPS).
+ */
+export function computeBudgetOccupancyPercent(
+  workMs: number,
+  targetFps: number = DEFAULT_TARGET_FPS,
+): number {
+  const budgetMs = 1000 / targetFps;
+  return (workMs / budgetMs) * 100;
+}

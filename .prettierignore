@@ -6,5 +6,6 @@ coverage/
 pnpm-lock.yaml
 test/fixtures/
 
-# Documento editado à mão; o Prettier reflui as tabelas e os blocos e polui o diff.
+# Documentos editados à mão; o Prettier reflui as tabelas e os blocos e polui o diff.
 CLAUDE.md
+docs/DECISOES.md

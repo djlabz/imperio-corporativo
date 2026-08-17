@@ -44,23 +44,29 @@ exceção, pare e pergunte.
 ### 2. Dinheiro é inteiro, em centavos
 
 ```ts
-type Money = number;   // SEMPRE centavos, SEMPRE inteiro
-type Bps   = number;   // basis points. 1 bp = 0,01%. 10_000 bps = 100%
+type Money = number & { readonly [MoneyBrand]: true };   // SEMPRE centavos, SEMPRE inteiro
+type Bps   = number & { readonly [BpsBrand]: true };     // basis points. 1 bp = 0,01%. 10_000 bps = 100%
 ```
 
 - ❌ `saldo += lucro * 0.15` — nunca. Float acumula erro.
-- ✅ `saldo += applyRate(lucro, 1500)`
-- Toda operação que possa gerar fração usa `Math.floor` explicitamente
-- Percentuais são `Bps` inteiros, nunca `0.15`
+- ✅ `saldo += applyRate(lucro, bps(1500))`
+- Toda operação que possa gerar fração arredonda explicitamente em direção a
+  zero (`Math.trunc`, ou `BigInt` quando o intermediário pode estourar
+  `Number.MAX_SAFE_INTEGER` — ver `applyRate`), nunca deixa o float decidir
+- Percentuais são `Bps` inteiros, construídos via `bps()`, nunca `0.15`
 
-`Money` é um branded type (`number & { brand }`), construído só via `centavos()` /
-`reais()`. Isso barra dois erros reais: passar um `number` cru como argumento
-onde a função espera `Money`, e atribuir um `number` cru a uma variável `Money`
-— ambos viram erro de tipo. **Não barra** `money + 5` ou `moneyA - moneyB`
-crus: o operador `+`/`-`/`*` do TypeScript só exige que os operandos sejam
-atribuíveis a `number`, e um branded number é um `number`. Aritmética direta
-ainda computa o valor numérico correto — só escapa da validação de inteiro e
-do teto de `Number.MAX_SAFE_INTEGER` que `centavos()` faz. Por isso: sempre
+`Money` e `Bps` são branded types (`number & { brand }`), construídos só via
+`centavos()`/`reais()` e `bps()` respectivamente. Isso barra dois erros reais:
+passar um `number` cru como argumento onde a função espera `Money`/`Bps`, e
+atribuir um `number` cru a uma variável desses tipos — ambos viram erro de
+tipo. Sem o brand em `Bps`, `applyRate(m, 0.15)` (querendo dizer 15%) compilava,
+rodava, e devolvia `0` em silêncio — `Math.floor(0.15)` é zero.
+
+**Não barra** `money + 5` ou `moneyA - moneyB` crus: o operador `+`/`-`/`*` do
+TypeScript só exige que os operandos sejam atribuíveis a `number`, e um
+branded number é um `number`. Aritmética direta ainda computa o valor
+numérico correto — só escapa da validação de inteiro e do teto de
+`Number.MAX_SAFE_INTEGER` que `centavos()`/`bps()` fazem. Por isso: sempre
 `add()` / `sub()` / `mul()` / `applyRate()`, nunca o operador cru.
 
 ### 3. Passo fixo, nunca deltaTime

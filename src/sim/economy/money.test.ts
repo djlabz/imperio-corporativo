@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { add, applyRate, centavos, fmt, mul, reais, sub, type Money } from "./money";
+import { add, applyRate, bps, centavos, fmt, mul, reais, sub, type Bps, type Money } from "./money";
 
 describe("centavos / reais", () => {
   it("centavos() aceita um inteiro e vira Money", () => {
@@ -22,6 +22,35 @@ describe("centavos / reais", () => {
     for (const value of [19.9, 0.1, 2.005, -3.33, 1234.56]) {
       expect(Number.isInteger(reais(value))).toBe(true);
     }
+  });
+});
+
+describe("bps() — a outra metade da Regra 2", () => {
+  it("aceita um inteiro válido", () => {
+    expect(bps(1500)).toBe(1500);
+  });
+
+  it("rejeita fração — é exatamente o erro que a Regra 2 antecipa e barrava só na prosa", () => {
+    // Antes desta correção, applyRate(m, 0.15) compilava, rodava e devolvia 0
+    // (Math.floor(0.15) === 0) — o dev queria dizer 15% e não recebia erro nenhum.
+    expect(() => bps(0.15)).toThrow(RangeError);
+    expect(() => bps(15.5)).toThrow(RangeError);
+  });
+
+  it("rejeita negativo", () => {
+    expect(() => bps(-100)).toThrow(RangeError);
+  });
+
+  it("rejeita acima do teto de sanidade", () => {
+    expect(() => bps(100_001)).toThrow(RangeError);
+  });
+
+  it("aceita a borda do teto", () => {
+    expect(bps(100_000)).toBe(100_000);
+  });
+
+  it("aceita zero", () => {
+    expect(bps(0)).toBe(0);
   });
 });
 
@@ -52,7 +81,7 @@ describe("aritmética — add / sub / mul / applyRate", () => {
     expect(Number.isInteger(add(a, b))).toBe(true);
     expect(Number.isInteger(sub(a, b))).toBe(true);
     expect(Number.isInteger(mul(a, 7))).toBe(true);
-    expect(Number.isInteger(applyRate(a, 1_500))).toBe(true);
+    expect(Number.isInteger(applyRate(a, bps(1_500)))).toBe(true);
   });
 
   it("add / sub fazem a conta certa", () => {
@@ -63,21 +92,90 @@ describe("aritmética — add / sub / mul / applyRate", () => {
   it("sub com resultado negativo é permitido — dívida é Money válido", () => {
     expect(sub(centavos(100), centavos(300))).toBe(-200);
   });
+});
 
-  it("applyRate arredonda em .5 para baixo, de propósito — nunca a favor do jogador", () => {
-    // 103 centavos a 50% (5_000 bps) = 51.5 → floor → 51
-    expect(applyRate(centavos(103), 5_000)).toBe(51);
-    // 100 bps = 1% exato, sem fração — controle
-    expect(applyRate(centavos(10_000), 100)).toBe(100);
+describe("mul() / applyRate() — arredondamento simétrico nos dois sinais (Math.trunc)", () => {
+  // Math.floor arredonda sempre em direção a -infinito: perde fração a favor
+  // da casa quando o valor é positivo, mas GANHA fração de dívida quando é
+  // negativo — inversão de sentido descoberta na revisão. EBIT negativo
+  // (empresa no prejuízo) é o caso normal no começo do jogo, não uma borda
+  // rara. Math.trunc arredonda em direção a zero nos dois sinais: a casa
+  // sempre fica com a fração, nunca o contrário.
+
+  it("mul: metade de fração positiva trunca para baixo em magnitude", () => {
+    expect(mul(centavos(101), 0.5)).toBe(50); // trunc(50.5) = 50
   });
 
-  it("applyRate com Money negativo floor para o lado mais negativo (não arredonda para 0)", () => {
-    // -103 * 5000 / 10000 = -51.5 → Math.floor(-51.5) = -52
-    expect(applyRate(centavos(-103), 5_000)).toBe(-52);
+  it("mul: mesma magnitude de fração, money negativo — resultado espelhado, não mais negativo", () => {
+    // Com Math.floor isto daria -51 (dívida maior que a exata). Com trunc, -50.
+    expect(mul(centavos(-101), 0.5)).toBe(-50);
+  });
+
+  it("mul: |resultado(-x)| === |resultado(x)| para o mesmo fator — é a garantia de simetria", () => {
+    const factor = 0.5;
+    for (const value of [101, 103, 999, 12_345]) {
+      expect(mul(centavos(-value), factor)).toBe(-mul(centavos(value), factor));
+    }
   });
 
   it("mul com fator negativo inverte o sinal corretamente", () => {
     expect(mul(centavos(500), -1)).toBe(-500);
+  });
+
+  it("applyRate: 103 centavos a 50% trunca para baixo em magnitude", () => {
+    expect(applyRate(centavos(103), bps(5_000))).toBe(51); // trunc(51.5) = 51
+    expect(applyRate(centavos(10_000), bps(100))).toBe(100); // sem fração — controle
+  });
+
+  it("applyRate: mesma taxa, Money negativo — resultado espelhado, não mais negativo (era o bug)", () => {
+    // Antes (Math.floor): applyRate(-103, 5000) = -52 (dívida maior que a exata).
+    // Depois (BigInt, trunca em direção a zero): -51, espelho exato de +51.
+    expect(applyRate(centavos(-103), bps(5_000))).toBe(-51);
+  });
+
+  it("applyRate: |resultado(-x)| === |resultado(x)| para a mesma taxa — mesma garantia de simetria", () => {
+    const rate = bps(5_000);
+    for (const value of [103, 999, 12_345, 7]) {
+      expect(applyRate(centavos(-value), rate)).toBe(-applyRate(centavos(value), rate));
+    }
+  });
+});
+
+describe("applyRate() — precisão em valores grandes (BigInt, não float)", () => {
+  // Casos reais encontrados na revisão: money * bps estoura Number.MAX_SAFE_INTEGER
+  // no intermediário, e dividir de volta por 10_000 em float devolve um
+  // valor que passa em Number.isSafeInteger mas está errado por 1 centavo.
+  // Cada caso abaixo tem o valor exato calculado independentemente via BigInt.
+  const knownCases: ReadonlyArray<{ money: number; rateBps: number; exact: number }> = [
+    { money: 748_046_709_814_882, rateBps: 8_941, exact: 668_828_563_245_485 },
+    { money: 837_382_127_512_851, rateBps: 8_895, exact: 744_851_402_422_680 },
+    { money: 474_753_751_880_319, rateBps: 5_392, exact: 255_987_223_013_868 },
+  ];
+
+  it.each(knownCases)(
+    "money=$money bps=$rateBps dá o valor exato, não o que o float arredondado daria",
+    ({ money, rateBps, exact }) => {
+      expect(applyRate(centavos(money), bps(rateBps))).toBe(exact);
+    },
+  );
+
+  it("o mesmo teto de casos também é exato com Money negativo", () => {
+    for (const { money, rateBps, exact } of knownCases) {
+      expect(applyRate(centavos(-money), bps(rateBps))).toBe(-exact);
+    }
+  });
+
+  it("fuzz: bate com o valor exato via BigInt em 5000 amostras grandes aleatórias", () => {
+    // Regressão do bug de precisão: gera valores na faixa onde a divergência
+    // apareceu de verdade (~1e14–1e15 centavos), compara com o cálculo
+    // independente via BigInt, e falha no primeiro descompasso.
+    for (let i = 0; i < 5000; i++) {
+      const money = Math.floor(1e14 + Math.random() * 9e14);
+      const rateValue = Math.floor(Math.random() * 10_000);
+      const expected = Number((BigInt(money) * BigInt(rateValue)) / 10_000n);
+
+      expect(applyRate(centavos(money), bps(rateValue))).toBe(expected);
+    }
   });
 });
 
@@ -106,9 +204,33 @@ describe("branded type — o que a trava de tipo realmente barra", () => {
     expect(rawAsMoney).toBe(500); // roda normalmente: é só o TS que reclama, JS não distingue
   });
 
+  it("barra atribuir number cru a uma variável Bps", () => {
+    // @ts-expect-error — number cru não é atribuível a Bps sem passar por bps()
+    const rawAsBps: Bps = 1500;
+    expect(rawAsBps).toBe(1500);
+  });
+
   it("barra passar number cru como argumento onde se espera Money", () => {
     // @ts-expect-error — add() espera Money, não number cru
     expect(() => add(500, centavos(100))).not.toThrow();
+  });
+
+  it("barra no tipo passar number cru onde se espera Bps — a trava nova desta correção", () => {
+    // @ts-expect-error — applyRate() espera Bps, não number cru; um inteiro
+    // válido bypassando o tipo ainda COMPUTA (só pula a validação de faixa),
+    // porque BigInt(1500) não lança. Isto documenta o que o tipo barra: o
+    // erro de chamada, não a aritmética em si — igual ao Money.
+    expect(applyRate(centavos(100), 1_500)).toBe(15);
+  });
+
+  it("bônus de proteção em runtime: contornar o tipo com um Bps fracionário lança de qualquer jeito", () => {
+    // Efeito colateral favorável do BigInt: BigInt(0.15) lança RangeError
+    // ("not an integer") — diferente do bug original, que devolvia 0 em
+    // silêncio. Mesmo ignorando o erro de tipo do @ts-expect-error acima,
+    // o valor fracionário ainda é pego, só que por um erro de mensagem
+    // diferente (de conversão de BigInt, não de validação de bps()).
+    // @ts-expect-error — mesmo bypass do teste anterior, mas com fração
+    expect(() => applyRate(centavos(100), 0.15)).toThrow(RangeError);
   });
 
   it("NÃO barra operador aritmético cru sobre dois Money — limitação documentada no CLAUDE.md", () => {

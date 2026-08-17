@@ -36,7 +36,16 @@ class Arc4Rng implements Rng {
     if (items.length === 0) {
       throw new RangeError("pick() não aceita array vazio");
     }
-    return items[this.int(0, items.length - 1)] as T;
+    const value = items[this.int(0, items.length - 1)];
+    // int(0, length-1) já garante o índice dentro dos limites (testado em
+    // rng.test.ts) — isto nunca deveria disparar. Verificação explícita em
+    // vez de `as T`: um cast passaria despercebido quando noUncheckedIndexedAccess
+    // ligar em src/sim/ (pendência P-02), escondendo um `T | undefined` real
+    // em vez de forçar a prova. Se isto disparar, o bug está em int(), não aqui.
+    if (value === undefined) {
+      throw new Error("pick(): índice calculado por int() saiu dos limites do array");
+    }
+    return value;
   }
 
   getState(): RngState {

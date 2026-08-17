@@ -9,41 +9,41 @@ importers:
   .:
     dependencies:
       '@msgpack/msgpack':
-        specifier: ^3.1.3
+        specifier: 3.1.3
         version: 3.1.3
       fflate:
-        specifier: ^0.8.3
+        specifier: 0.8.3
         version: 0.8.3
       pixi.js:
-        specifier: ^8.19.0
+        specifier: 8.19.0
         version: 8.19.0
       seedrandom:
-        specifier: ^3.0.5
+        specifier: 3.0.5
         version: 3.0.5
       zod:
-        specifier: ^4.4.3
+        specifier: 4.4.3
         version: 4.4.3
     devDependencies:
       '@types/node':
-        specifier: ^26.2.0
+        specifier: 26.2.0
         version: 26.2.0
       '@types/seedrandom':
-        specifier: ^3.0.8
+        specifier: 3.0.8
         version: 3.0.8
       oxlint:
-        specifier: ^1.78.0
+        specifier: 1.78.0
         version: 1.78.0
       prettier:
-        specifier: ^3.9.6
+        specifier: 3.9.6
         version: 3.9.6
       typescript:
-        specifier: ^7.0.2
+        specifier: 7.0.2
         version: 7.0.2
       vite:
-        specifier: ^8.2.1
+        specifier: 8.2.1
         version: 8.2.1(@types/node@26.2.0)
       vitest:
-        specifier: ^4.1.10
+        specifier: 4.1.10
         version: 4.1.10(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0))
 
 packages:

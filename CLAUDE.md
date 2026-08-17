@@ -53,6 +53,16 @@ type Bps   = number;   // basis points. 1 bp = 0,01%. 10_000 bps = 100%
 - Toda operação que possa gerar fração usa `Math.floor` explicitamente
 - Percentuais são `Bps` inteiros, nunca `0.15`
 
+`Money` é um branded type (`number & { brand }`), construído só via `centavos()` /
+`reais()`. Isso barra dois erros reais: passar um `number` cru como argumento
+onde a função espera `Money`, e atribuir um `number` cru a uma variável `Money`
+— ambos viram erro de tipo. **Não barra** `money + 5` ou `moneyA - moneyB`
+crus: o operador `+`/`-`/`*` do TypeScript só exige que os operandos sejam
+atribuíveis a `number`, e um branded number é um `number`. Aritmética direta
+ainda computa o valor numérico correto — só escapa da validação de inteiro e
+do teto de `Number.MAX_SAFE_INTEGER` que `centavos()` faz. Por isso: sempre
+`add()` / `sub()` / `mul()` / `applyRate()`, nunca o operador cru.
+
 ### 3. Passo fixo, nunca deltaTime
 
 A simulação avança em ticks de duração fixa (`TICK_MS = 100`). O acumulador fica
@@ -135,6 +145,11 @@ vem do `tsc --noEmit` com `strict`. Não instale `oxlint-tsgolint`.
 **Não adicione dependências sem justificar.** Especialmente: não traga engine de
 física, não traga ECS, não traga state manager global. Não precisamos.
 
+**Decisão de engine (16/08/2026):** Godot foi avaliado e descartado. Mantemos a
+stack web (TypeScript + PixiJS + Electron). O risco assumido é GC/engasgo de
+frame; a Etapa 4 (500 NPCs a 60fps) é o teste que valida ou invalida essa
+decisão. Decisão registrada não se rediscute por impulso.
+
 ---
 
 ## Perspectiva e arte
@@ -203,6 +218,8 @@ O objetivo é atrito contra edição casual, nada além disso.
 - Testes junto do código: `taxes.ts` → `taxes.test.ts`
 - Nada de comentário explicando o óbvio; comente o **porquê**, não o **o quê**
 - Commits pequenos e atômicos
+- Parâmetro não usado prefixado com `_` (`_dt`, `_index`) — é o escape hatch do
+  TypeScript para `noUnusedParameters`, que fica ligado
 - `noUncheckedIndexedAccess` fica **desligado** na Fase 0 — o código de grid e flow field
   (Etapas 3 e 4) é acesso indexado denso, e a flag ali vira atrito puro. **Ligar em
   `src/sim/` assim que a Fase 1 começar**, via `src/sim/tsconfig.json` próprio

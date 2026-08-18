@@ -352,6 +352,33 @@ que o teste certo falha, antes de restaurar.
 **Princípio:** teste que passaria com o código quebrado é pior que teste ausente —
 dá confiança falsa. Ausente você sabe que não tem cobertura.
 
+**Padrão que atravessa a Fase 0 inteira, formulado explícito porque apareceu
+três vezes independentes:** num projeto onde a defesa é automatizada, o modo
+de falha dominante não é a trava errada — **é a trava que não rodou**. As três
+instâncias, em ordem:
+
+1. Falso-verde do `.gitignore` (Etapa 1) — o probe de pureza do `sim/` seria
+   ignorado pelo oxlint e o teste passaria sem checar nada, se não fosse
+   ancorado em `length >= 8` em vez de só "sem erro".
+2. oxlint silencioso (Etapa 6) — a versão 1.78 não imprime **nada** quando
+   está limpo (nem "0 diagnósticos"), o que é indistinguível de "o comando
+   não rodou". É exatamente essa ambiguidade que deixou o lint vermelho
+   sobreviver a dois relatórios de etapa sem ninguém notar (linha "Relatório
+   de etapa não é verificação" acima).
+3. `exclude` herdado do `extends` (Etapa 6) — o subprojeto do Electron
+   compilava um programa vazio, e tanto `tsc --noEmit` quanto `tsc` sem essa
+   flag terminavam em exit 0, sem diferenciar "nada pra checar" de "checou e
+   passou".
+
+Nos três casos a ferramenta funcionava perfeitamente — o problema nunca foi a
+regra, foi a certeza de que ela estava mesmo olhando pro arquivo certo.
+**Toda verificação nova precisa de prova de que rodou sobre os arquivos
+certos** — não basta "saiu verde"; tem que existir um jeito de saber que
+"verde" não é sinônimo de "não executou". Na prática: plantar uma violação de
+propósito e confirmar que ela aparece, antes de confiar no caminho limpo (o
+mesmo raciocínio da mutação, aplicado à ferramenta de verificação em vez de
+ao código).
+
 **Ritmo:** durante o desenvolvimento, rodar só o arquivo afetado. Suíte completa
 uma vez antes do commit. Mutação apenas no código novo da etapa.
 

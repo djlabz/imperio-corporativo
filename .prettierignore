@@ -9,3 +9,8 @@ test/fixtures/
 # Documentos editados à mão; o Prettier reflui as tabelas e os blocos e polui o diff.
 CLAUDE.md
 docs/DECISOES.md
+
+# Skills vendoradas de terceiro: a cópia é byte-a-byte de propósito (D-010, regra 2),
+# e o Prettier reflui o markdown delas. Reformatar destrói a única coisa que torna a
+# cópia auditável — o diff contra o upstream. Ver .claude/skills/VENDOR.md.
+.claude/skills/

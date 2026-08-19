@@ -317,12 +317,14 @@ O objetivo é atrito contra edição casual, nada além disso.
 - Commits pequenos e atômicos
 - Parâmetro não usado prefixado com `_` (`_dt`, `_index`) — é o escape hatch do
   TypeScript para `noUnusedParameters`, que fica ligado
-- `noUncheckedIndexedAccess` fica **desligado** na Fase 0 — o código de grid e flow field
-  (Etapas 3 e 4) é acesso indexado denso, e a flag ali vira atrito puro. **Ligar em
-  `src/sim/` assim que a Fase 1 começar**, via `src/sim/tsconfig.json` próprio
-  (`"extends": "../../tsconfig.json"` + `"noUncheckedIndexedAccess": true`), com o script
-  `typecheck` passando a rodar os dois projetos. O núcleo é onde erro de índice vira bug
-  de economia silencioso; o renderer aguenta ficar sem.
+- `noUncheckedIndexedAccess` está **ligado em `src/sim/`** desde a F1-E1 (P-02), via
+  `src/sim/tsconfig.json` próprio, e **desligado no resto** — o código de grid e flow
+  field (Etapas 3 e 4) é acesso indexado denso, e a flag ali vira atrito puro. O núcleo
+  é onde erro de índice vira bug de economia silencioso; o renderer aguenta ficar sem.
+  `typecheck` e `build` rodam os três projetos (raiz, `src/sim/`, `src/platform/electron/`).
+  O `include` explícito no tsconfig do `sim/` não é decorativo: sem ele, o `include` do
+  raiz é herdado resolvido contra a pasta do raiz e o subprojeto passa a checar todo o
+  `src/` com a flag ligada.
 
 ---
 
@@ -338,6 +340,7 @@ O objetivo é atrito contra edição casual, nada além disso.
 - Quando terminar uma etapa, diga explicitamente o que foi feito e o que ficou
   pendente.
 - Ao fim de cada etapa: commit **e** push. Não deixe trabalho só no local.
+- Saída de verificação se coleta com `rtk proxy <cmd>`: o `rtk` resume saída de CLI e já sintetizou um "No errors found" que não existia (ver adendo de D-011).
 
 ---
 

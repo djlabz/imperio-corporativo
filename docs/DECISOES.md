@@ -382,6 +382,48 @@ ao código).
 **Ritmo:** durante o desenvolvimento, rodar só o arquivo afetado. Suíte completa
 uma vez antes do commit. Mutação apenas no código novo da etapa.
 
+**Adendo · 19/08/2026 · o resumo pode vir de fora do projeto**
+
+O remédio acima — "rodar os cinco comandos um por um e colar a saída bruta, nunca
+o resumo" — pressupõe que a saída **recebida** é bruta. Neste ambiente ela pode
+não ser.
+
+Medido na F1-E1: o hook `PreToolUse` do agente reescreve todo comando de shell
+para `rtk <cmd>`, e o `rtk` 0.44.0 é um proxy que comprime saída de CLI. Ele
+reconheceu `npx tsc --version` como uma invocação de `tsc`, descartou a saída
+verdadeira e a substituiu por um resumo próprio:
+
+| Comando | Saída |
+|---|---|
+| `rtk npx tsc --version` | `TypeScript: No errors found` |
+| `rtk proxy npx tsc --version` | `Version 7.0.2` |
+
+Ou seja: o filtro **sintetizou a frase "No errors found"** em resposta a uma
+pergunta que não era sobre erros. É o falso-verde deste log movido um nível para
+fora do projeto — **nenhuma defesa dentro do repo alcança**, porque nada dentro
+do repo participa.
+
+**Regra:** coleta de verificação passa por `rtk proxy`. Verificado antes de
+confiar, no espírito desta decisão: `rtk` e `rtk proxy` devolvem byte-idêntico
+tanto no sucesso (`Version 7.0.2`) quanto na falha (`error TS5058: The specified
+path does not exist: ...`, exit 1) para a forma `./node_modules/.bin/tsc` — o
+filtro só se engajou na forma `npx tsc`. O remédio não tem o defeito que
+conserta.
+
+**A parte que torna o achado grave não é o falso-verde.** O primeiro diagnóstico
+culpou o `npx` e alegou um mecanismo de supply chain que não existe ("o npx
+resolve por nome de pacote, não por nome de bin, então executa o homônimo do
+registro"). Esse diagnóstico falso **passou por uma rodada de revisão** e chegou
+a ser aprovado para entrar na seção de armadilhas do `CLAUDE.md`. Só caiu porque
+uma tentativa de reprodução **fora deste ambiente** — máquina sem `rtk`,
+montando a condição exata — falhou em reproduzi-lo. O filtro não produziu apenas
+um resultado errado: produziu uma **explicação** errada, plausível e revisada.
+Um resumo que inventa a resposta também faz inventar a causa.
+
+**A decisão desta seção não muda; a premissa ganha ressalva.** Ver P-09 para o
+que ainda não se sabe: quais comandos o `rtk` resume, e se algum resumo dele
+contaminou relatório de etapa da Fase 0.
+
 ---
 
 ## D-012 · Commit e push ao fim de cada etapa
@@ -532,10 +574,10 @@ documentos que valem sempre.
 | # | Item | Volta quando |
 |---|---|---|
 | P-01 | Teste de divergência por seed (removido quando o campo `noise` saiu) | Algum sistema do `sim/` consumir o RNG dentro de `tick()` — provavelmente Etapa 4, com spawn e movimento de NPC |
-| P-02 | `noUncheckedIndexedAccess` em `src/sim/` via tsconfig próprio | Início da Fase 1 |
 | P-06 | Surto de frames longos no aquecimento, escalando com N no WSL (26 frames a 2000 NPCs, 160 a 4000), estabilizando em 6–18s sem resíduo. Hipótese não confirmada: alocação por respawn em `randomEdgePoint()`. Correção candidata: escrever direto em x/y em vez de retornar `{x, y}`. **Atualizado na Etapa 6:** não reproduziu nativamente até N=4000 (`framesOver20ms` ficou em 1-2 de ~2850 em todo N, ver adendo de D-005) — a condição de reabertura abaixo não foi satisfeita, mas isso não confirma nem descarta a hipótese, só diz que não é visível no ambiente real nesta faixa | Se o surto aparecer com N ≤ 600 (o teto de pool real) no ambiente nativo, fora do padrão de aquecimento já observado |
 | P-07 | Avaliar o visual companion do `brainstorming` (5 arquivos em `scripts/`, ~60KB, inclui servidor HTTP local em Node de 25KB). Não foi vendorado com a skill (ver `.claude/skills/VENDOR.md`): a regra 1 do D-010 manda ler o `SKILL.md` inteiro antes de instalar, o que é viável porque é curto — 60KB de JS e shell de terceiro não recebe leitura do mesmo nível, e pinar num SHA garante que não muda, não que seja bom. **Condição para entrar:** auditoria do `server.cjs` e dos scripts de shell, pinagem em SHA, e registro do que ele abre e escuta | A Fase 1 chegar nas etapas de UI e a falta de ferramenta visual doer de verdade |
 | P-08 | Teste que trava a configuração do tsconfig de `src/sim/`, no padrão de `test/sim-purity.test.ts` — a trava da trava. Afirma: flag ligada, contagem de arquivos do programa, ausência de `../` no `files` resolvido, e o diferencial do probe. **Motivo:** a prova da F1-E1 é pontual e expira no instante em que alguém editar um config; sem teste, o único anteparo contra um programa silenciosamente vazio é um documento de plano que não está versionado | Qualquer edição em `src/sim/tsconfig.json`, ou o início da F1-E2 se ninguém tocar nele antes |
+| P-09 | Alcance do filtro do `rtk`: quais comandos ele resume, e se algum resumo contaminou relatório de etapa da Fase 0. A linha "Relatório de etapa não é verificação" na tabela acima diagnosticou os dois relatórios que disseram lint verde com o lint vermelho como exit 0 silencioso do oxlint — esse diagnóstico agora tem um **segundo suspeito** e vale reabrir com a informação nova (ver adendo de 19/08/2026). Nenhuma conclusão sobre a Fase 0 está sendo tirada aqui: a pendência é a pergunta | Início da F1-E2, ou antes se aparecer outra divergência entre saída de comando e realidade |
 
 ## Pendências fechadas
 
@@ -547,6 +589,7 @@ fechou vale mais que uma tabela curta.
 | P-03 | Teste de orçamento de frame específico para o pool de NPC, na suíte | `src/render/npc/npcPool.perf.test.ts` (Etapa 6), calibrado no custo por NPC medido nativamente (ver adendo de D-005) e verificado por mutação: uma regressão real no custo dominante (o laço de `syncNpcPoolView`) estoura o orçamento com folga; inflar uma parte barata (`sampleFlowField`) não, e isso também está documentado no cabeçalho do teste — nem toda mutação precisa "passar" pra ser informativa |
 | P-04 | Instrumentação de custo real de frame (vsync mascara o número) | Etapa 3: `computeBudgetOccupancyPercent()`, contador de frames longos nos limiares de 20ms/33ms, 1% low em janela deslizante, modo sem vsync e overlay separando update/render do frame total. Todos com teste em `debugStats.test.ts` / `DebugOverlayView.test.ts`. Foi o instrumento que produziu os números da Etapa 4 e localizou o surto de aquecimento da P-06 |
 | P-05 | Skills `brainstorming` + `writing-plans`, vendoradas | F1-E1, em três commits: cópia verbatim do SHA pinado, patches de conformidade com D-010 num commit só (o diff do patch é o commit, não prosa que desatualiza), e `.claude/skills/VENDOR.md` com proveniência. O visual companion do `brainstorming` e os dois `*-document-reviewer-prompt.md` ficaram de fora — os prompts porque nenhum `SKILL.md` os referencia, o companion por P-07 |
+| P-02 | `noUncheckedIndexedAccess` em `src/sim/` via tsconfig próprio | F1-E1, `src/sim/tsconfig.json`. Zero correções necessárias no código existente — o `pick()` de `rng.ts` já tinha a checagem explícita, escrita de propósito pra sobreviver a esta flag. **É exatamente por isso que a prova foi necessária:** ligar a flag produzia exit 0 tanto se o config estivesse correto quanto se estivesse compilando zero arquivo. Provado com probe que falha sob `pnpm typecheck` (exit 1, TS2322) e passa sob o `tsc --noEmit` da raiz sozinho (exit 0), estando nos DOIS programas — e controle com a flag forçada `false` passando, pra isolar a flag e não o config. Provado pelo script, não pelo `tsc` cru: config correto que ninguém chama é a mesma falha por outro caminho |
 
 ---
 
@@ -569,8 +612,17 @@ fechou vale mais que uma tabela curta.
 duas decisões que dependiam de medição no ambiente real (D-005 engine, P-06
 warmup) agora têm número do `.exe` nativo, não só do WSL.
 
-**Próximo:** Fase 1 — sai do spike técnico pra conteúdo de jogo (mineração,
-vertical slice de D-004). Pendências que essa transição dispara: P-02
-(`noUncheckedIndexedAccess` em `src/sim/`) e P-05 (skills `brainstorming` +
-`writing-plans`) ficam no início da Fase 1, por decisão já registrada em
-D-010/convenções de código.
+**Fase 1 (vertical slice de mineração, D-004) — em andamento.**
+
+**F1-E1 · higiene de transição, sem conteúdo de jogo.** Numeração `F<fase>-E<etapa>`
+e caixa de nome em `docs/` (D-015); `CLAUDE.md` deixou de afirmar Fase 0, o que
+bloqueava ativamente a etapa seguinte; P-02 e P-05 fechadas — as duas que a
+transição disparava, por decisão já registrada em D-010/convenções de código.
+Inventário do que é spike e do que é conteúdo entregue como diagnóstico, sem
+apagar nada: a decisão de remover é de quem toca o jogo, não de quem mediu.
+Abriu P-07 (visual companion não vendorado), P-08 (a trava da trava do tsconfig
+do `sim/`) e P-09 (alcance do filtro do `rtk`, achado no meio da própria
+verificação desta etapa).
+
+**Próximo:** F1-E2 — o primeiro sistema de jogo do `sim/`. É onde P-01 fecha, se
+o sistema consumir o RNG dentro de `tick()`.

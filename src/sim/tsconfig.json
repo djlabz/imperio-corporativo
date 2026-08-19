@@ -1,0 +1,34 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // P-02. Aqui um índice fora dos limites vira bug de economia silencioso, e o
+    // núcleo é pequeno o bastante pra provar cada acesso. O renderer fica de fora
+    // de propósito: grid e flow field são acesso indexado denso, onde a flag é
+    // atrito puro (ver CLAUDE.md, Convenções de código). É por isso que ela mora
+    // neste tsconfig e não no raiz.
+    //
+    // `noEmit` NÃO se repete aqui — é herdado do raiz (confirmado no
+    // `--showConfig`). Não copie o `"noEmit": false` do irmão do Electron: aquele
+    // existe porque aquele subprojeto emite de verdade, este não emite nada.
+    "noUncheckedIndexedAccess": true
+  },
+  // `exclude` vazio é profilaxia, não necessidade: o exclude do raiz hoje é só
+  // `src/platform/electron/*.cts`, que não alcança src/sim/. Mas foi justamente
+  // herdar o exclude do raiz que fez o subprojeto do Electron compilar zero
+  // arquivo com `tsc --noEmit` saindo 0 em silêncio (ver D-011, terceira
+  // instância do padrão). Zerar aqui garante que nenhum padrão novo no raiz
+  // consiga esvaziar este programa sem ninguém notar.
+  "exclude": [],
+  // `include` explícito NÃO é opcional. Caminhos relativos de `include` num
+  // config estendido resolvem contra a pasta de quem os ESCREVEU, não de quem
+  // herda: sem esta linha, o `["src", "test", "vite.config.ts"]` do raiz chega
+  // aqui como `["../../src", "../../test", ...]` e este projeto compila TODO o
+  // src/ — src/render/ incluído — com a flag ligada, exatamente o que não se
+  // quer. Verificado com `tsc --showConfig`.
+  //
+  // Os *.test.ts entram de propósito. É onde a flag mais paga: money.test.ts tem
+  // 278 linhas de tabela e fixture, e é ali que um `results[3]` virando
+  // `undefined` produz teste verde que não testa nada — pior que erro em código
+  // de produção.
+  "include": ["**/*.ts"]
+}

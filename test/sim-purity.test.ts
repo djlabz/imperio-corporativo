@@ -11,7 +11,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 // até o núcleo já estar sujo.
 //
 // ATENÇÃO: este teste escreve um arquivo temporário dentro de src/sim/. Não rode
-// em paralelo com `tsc --watch` ou com o dev server — eles veriam o probe.
+// em paralelo com `tsc --watch`, com o dev server, nem com `pnpm typecheck` — todos
+// veriam o probe. O `typecheck` entrou nessa lista na F1-E1: o
+// `src/sim/tsconfig.json` (P-02) tem `include: ["**/*.ts"]`, então o probe — que é
+// deliberadamente cheio de `pixi.js`, `window` e `Math.random` — passou a cair
+// dentro daquele programa. Um typecheck concorrente estoura com erros que não têm
+// nada a ver com o código sob teste.
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURE = path.join(repoRoot, "test", "fixtures", "sim-purity-violations.txt");

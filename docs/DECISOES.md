@@ -484,6 +484,49 @@ ver adendo de D-005 pro resultado.
 
 ---
 
+## D-015 · Numeração de etapas por fase, e caixa de nome em `docs/`
+**19/08/2026 · Fechada**
+
+As Etapas 1 a 6 da Fase 0 não têm prefixo. Da Fase 1 em diante, toda etapa se
+identifica como `F<fase>-E<etapa>`, com o contador de etapa reiniciando a cada
+fase. O identificador entra no fim da linha de assunto do commit:
+`feat: descrição — F1-E2`.
+
+**Motivo:** o contador reinicia, então sem prefixo ele colide. Um
+`git log --grep "Etapa 4"` passa a devolver duas coisas sem relação nenhuma — os
+NPCs decorativos da Fase 0 e o que quer que seja a quarta etapa da Fase 1. O
+identificador de etapa é o único índice que o histórico tem; se ele é ambíguo,
+não é índice.
+
+**Histórico não se reescreve.** As menções a "Etapa N" sem prefixo neste arquivo,
+na `FASE-0-RETROSPECTIVA.md` e nos commits antigos ficam como estão. Fica
+registrado aqui, e é o que resolve a ambiguidade para trás: **etapa sem prefixo é
+da Fase 0.** Reescrever trocaria um índice ambíguo por um histórico falsificado —
+pior negócio.
+
+**Caixa de nome em `docs/` passa a significar tempo de vida:**
+
+| Caixa | Significa | Exemplo |
+|---|---|---|
+| CAIXA ALTA | Governança — vale em qualquer momento do projeto | `DECISOES.md`, `FASE-0-RETROSPECTIVA.md` |
+| minúscula | Artefato de trabalho — validade de uma etapa | `docs/fase-1/f1-e2-spec.md` |
+
+Artefato de trabalho vive em `docs/fase-<n>/`, nomeado `f<n>-e<m>-spec.md` e
+`f<n>-e<m>-plano.md` (`<n>` = fase, `<m>` = etapa; a fase aparece no nome do
+arquivo além da pasta porque a pasta sozinha não ordena nem identifica um arquivo
+movido de lugar). **Sem subpasta por etapa:** nem toda etapa gera os dois
+artefatos — a F1-E1 não gera nenhum — e pasta vazia é ruído. O prefixo já ordena
+na listagem.
+
+Retrospectiva de fase é governança, não artefato de trabalho: a
+`FASE-1-RETROSPECTIVA.md` vai na **raiz** de `docs/`, não dentro de `docs/fase-1/`.
+
+**Motivo da separação:** até aqui `docs/` continha só governança. Misturar dezenas
+de specs e planos de etapa na mesma raiz enterraria, em doze meses, os dois
+documentos que valem sempre.
+
+---
+
 ## Pendências abertas
 
 | # | Item | Volta quando |
@@ -492,6 +535,8 @@ ver adendo de D-005 pro resultado.
 | P-02 | `noUncheckedIndexedAccess` em `src/sim/` via tsconfig próprio | Início da Fase 1 |
 | P-05 | Skills `brainstorming` + `writing-plans`, vendoradas | Início da Fase 1 |
 | P-06 | Surto de frames longos no aquecimento, escalando com N no WSL (26 frames a 2000 NPCs, 160 a 4000), estabilizando em 6–18s sem resíduo. Hipótese não confirmada: alocação por respawn em `randomEdgePoint()`. Correção candidata: escrever direto em x/y em vez de retornar `{x, y}`. **Atualizado na Etapa 6:** não reproduziu nativamente até N=4000 (`framesOver20ms` ficou em 1-2 de ~2850 em todo N, ver adendo de D-005) — a condição de reabertura abaixo não foi satisfeita, mas isso não confirma nem descarta a hipótese, só diz que não é visível no ambiente real nesta faixa | Se o surto aparecer com N ≤ 600 (o teto de pool real) no ambiente nativo, fora do padrão de aquecimento já observado |
+| P-07 | Avaliar o visual companion do `brainstorming` (5 arquivos em `scripts/`, ~60KB, inclui servidor HTTP local em Node de 25KB). Não foi vendorado com a skill (ver `.claude/skills/VENDOR.md`): a regra 1 do D-010 manda ler o `SKILL.md` inteiro antes de instalar, o que é viável porque é curto — 60KB de JS e shell de terceiro não recebe leitura do mesmo nível, e pinar num SHA garante que não muda, não que seja bom. **Condição para entrar:** auditoria do `server.cjs` e dos scripts de shell, pinagem em SHA, e registro do que ele abre e escuta | A Fase 1 chegar nas etapas de UI e a falta de ferramenta visual doer de verdade |
+| P-08 | Teste que trava a configuração do tsconfig de `src/sim/`, no padrão de `test/sim-purity.test.ts` — a trava da trava. Afirma: flag ligada, contagem de arquivos do programa, ausência de `../` no `files` resolvido, e o diferencial do probe. **Motivo:** a prova da F1-E1 é pontual e expira no instante em que alguém editar um config; sem teste, o único anteparo contra um programa silenciosamente vazio é um documento de plano que não está versionado | Qualquer edição em `src/sim/tsconfig.json`, ou o início da F1-E2 se ninguém tocar nele antes |
 
 ## Pendências fechadas
 

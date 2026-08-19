@@ -14,7 +14,13 @@ forçado a abrir uma sede administrativa quando a carga tributária começa a
 devorar o lucro. A tensão central do jogo é **folha de pagamento × carga
 tributária**: contadores reduzem imposto, mas custam salário.
 
-Estamos na **Fase 0 (spike técnico)**. Não escreva conteúdo de jogo ainda.
+Estamos na **Fase 1: vertical slice de mineração (D-004)**. Conteúdo de jogo
+agora é o trabalho, não o que se evita.
+
+**Critério de aceite do slice:** jogar 20 minutos e querer continuar. Nada mais.
+
+**O passo que importa:** o primeiro imposto tem que doer. Se o jogador passar
+batido por ele, o slice falhou e se reescreve antes de adicionar conteúdo.
 
 ---
 
@@ -323,9 +329,12 @@ O objetivo é atrito contra edição casual, nada além disso.
 ## Como trabalhar comigo
 
 - **Uma etapa por vez.** Termine, mostre, espere retorno antes da próxima.
+- **Numeração de etapas: `F<fase>-E<etapa>`.** O contador de etapa reinicia a cada
+  fase. Etapa sem prefixo no histórico é da Fase 0 (Etapas 1 a 6). O identificador
+  entra no fim da linha de assunto do commit: `feat: descrição — F1-E2`.
 - Se algo neste documento conflitar com o que eu pedir no chat, **me avise** antes
   de seguir. Não assuma qual dos dois vence.
-- Se precisar violar uma regra invioláve, pare e pergunte. Não contorne em silêncio.
+- Se precisar violar uma regra inviolável, pare e pergunte. Não contorne em silêncio.
 - Quando terminar uma etapa, diga explicitamente o que foi feito e o que ficou
   pendente.
 - Ao fim de cada etapa: commit **e** push. Não deixe trabalho só no local.

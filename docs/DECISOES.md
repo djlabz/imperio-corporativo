@@ -649,9 +649,14 @@ falhou e se revisa.**
 
 **Consequência técnica:** o destino do clique é o objetivo de um flow field, o
 que mantém a regra do `CLAUDE.md` ("flow field, nunca A*") sem exceção. O grid é
-40×30 = 1200 células; recomputar o campo a cada clique é barato.
-`buildFlowField()` hoje não recebe destino — vai precisar de parâmetro. Isso é
-trabalho da F1-E3, não da F1-E2.
+40×30 = 1200 células. `buildFlowField()` hoje não recebe destino — vai precisar
+de parâmetro. Isso é trabalho da F1-E3, não da F1-E2.
+
+**Hipótese não confirmada, rotulada por D-018:** que recomputar o campo a cada
+clique seja barato. A versão original deste parágrafo afirmava isso como fato, e
+1200 células é argumento de ordem de grandeza, não medição. A F1-E3 mede o custo
+de uma recomputação e este parágrafo passa a carregar o número — ou a decisão de
+não recomputar por clique.
 
 **Posição NÃO entra no `sim/`.** A posição do gerente é estado do renderer.
 Movimento é float, e float no `sim/` traz determinismo entre máquinas e migração
@@ -660,6 +665,23 @@ bastante e emite `MINE` (ver D-016); o `sim/` só recebe o comando.
 
 **Condição para revisar:** o `sim/` precisar saber onde o gerente está — um
 evento que só dispare com ele presente, por exemplo.
+
+**Complemento · 20/08/2026 · onde se vende, que é a metade que faltava**
+
+Corpo sem lugar pra ir não produz atrito nenhum. O minério é vendido na
+**refinaria**, um lugar no mapa, e não de qualquer ponto. Sem destino obrigatório,
+"o gerente tem corpo" seria só uma animação: o jogador mineraria e venderia
+parado no mesmo tile, e a caminhada não custaria nada.
+
+A refinaria **não é do jogador** nesta fase. É compradora de minério, e ponto —
+sem construção, sem melhoria, sem gestão. Ver D-019 pro que ela vira depois, e
+tomar cuidado pra não fechar essa porta por acidente.
+
+**Válvula de escape, já decidida junto:** melhorias de locomoção compradas com
+dinheiro, ao estilo Cities: Skylines 2. É a mesma forma da automação e do
+compromisso acima — atrito no começo, resolvido pagando. O que torna o atrito
+justificável é existir a saída; sem ela, isto seria só uma taxa sobre o tempo do
+jogador.
 
 ---
 
@@ -705,6 +727,42 @@ estava aprovada para entrar no `CLAUDE.md`, que é constituição.
 
 ---
 
+## D-019 · Visão de longo prazo da cadeia produtiva
+**20/08/2026 · Visão, não escopo**
+
+**Esta entrada é VISÃO.** Nada aqui é escopo, nada aqui está aprovado, e nada
+aqui autoriza uma linha de código. Ela existe por um motivo só: **decisão de
+arquitetura tomada hoje não deve fechar uma dessas portas por acidente.** Quando
+uma escolha de estrutura for feita, é contra esta lista que ela se confere — não
+pra construir nada dela.
+
+**A cadeia:** minério → refinaria → siderúrgica / usina → **ferro** como produto
+final. A refinaria da F1-E3 é o primeiro elo, e nesta fase é só compradora
+(complemento de D-017).
+
+**O que a visão contém:**
+
+- **Edifícios compráveis e melhoráveis.** A refinaria deixa de ser um NPC
+  comprador e passa a ser algo que se possui e se evolui.
+- **Otimização de processo:** render mais produto por unidade de insumo. É a
+  camada onde a decisão do jogador deixa de ser "quanto" e passa a ser "como".
+- **Compra de construção de terceiros a preço negociado.** Isto é o item de maior
+  consequência arquitetural da lista, e é de onde a P-11 nasce: "terceiros" com
+  patrimônio implica ator econômico que não é o jogador.
+
+**Por que registrar algo que não vai ser feito:** o risco não é esquecer a visão
+— é cimentar contra ela sem perceber. Um `World` com um `money`, um `depositKg` e
+um `stockKg` já assume, em silêncio, que existe um ator só. Isso é adequado hoje e
+seria caro de desfazer depois de folha de pagamento, imposto e save migrados por
+cima da suposição. É por isso que a P-11 tem condição de reabertura ANTES da
+F1-E4, e não "quando o multiplayer for feito".
+
+**O que esta entrada NÃO faz:** não promete nenhum desses elos, não fixa ordem
+entre eles, e não é compromisso de fase. A Fase 1 termina no vertical slice de
+D-004 — mineração, folha e imposto — e nada além.
+
+---
+
 ## Pendências abertas
 
 | # | Item | Volta quando |
@@ -714,6 +772,7 @@ estava aprovada para entrar no `CLAUDE.md`, que é constituição.
 | P-07 | Avaliar o visual companion do `brainstorming` (5 arquivos em `scripts/`, ~60KB, inclui servidor HTTP local em Node de 25KB). Não foi vendorado com a skill (ver `.claude/skills/VENDOR.md`): a regra 1 do D-010 manda ler o `SKILL.md` inteiro antes de instalar, o que é viável porque é curto — 60KB de JS e shell de terceiro não recebe leitura do mesmo nível, e pinar num SHA garante que não muda, não que seja bom. **Condição para entrar:** auditoria do `server.cjs` e dos scripts de shell, pinagem em SHA, e registro do que ele abre e escuta | A Fase 1 chegar nas etapas de UI e a falta de ferramenta visual doer de verdade |
 | P-09 | Alcance do filtro do `rtk` (ver adendo de 19/08/2026). **Medido na F1-E1, e o dado fecha a parte que importava:** os dois relatórios contaminados que a tabela acima registra eram sobre **lint**, e lint não é filtrado. `pnpm lint` sai byte-idêntico nos três caminhos (`rtk`, `rtk proxy`, sem prefixo) nos dois estados: limpo (9 bytes, `sha fe821952`, exit 0) e com 8 diagnósticos reais plantados pelo fixture de `sim-purity` (1458 bytes, `sha 07ec404e`, exit 1). Comparar só o estado limpo não discriminaria nada — vazio contra vazio; foi preciso um estado com saída de verdade. Na forma `npx oxlint` a saída também é equivalente — 8 de 8 diagnósticos intactos; a única diferença é a linha `npm warn` do `.npmrc` mudando de posição (intercalação de stdout/stderr, não resumo). **Consequência:** o filtro não explica os dois relatórios da Fase 0, e o diagnóstico original (`oxlint` não imprime nada quando limpo, indistinguível de "não rodou") continua sendo a explicação. O que resta aberto é estritamente menor: só `tsc` invocado como `npx tsc` foi visto sintetizando saída, e o inventário completo de quais comandos o `rtk` resume não foi levantado | **Fechada a parte do lint na F1-E2, com o dado que faltava:** o `rtk` **estava** presente durante toda a Fase 0 — binário de 26/07/2026, hook em `~/.claude/settings.json` de 11/08, e a Fase 0 rodou de 16 a 17/08. Então o segundo suspeito não cai por ausência. Cai pela medição: com 8 diagnósticos reais plantados, `pnpm lint` sai byte-idêntico nos três caminhos, e na forma `npx oxlint` a única diferença é a linha `npm warn` mudando de posição. Ressalva honesta: o mtime do binário diz "não foi reescrito desde 26/07", o que torna 0.44.0 a versão provável durante a Fase 0, não a versão provada. | Aparecer outra divergência entre saída de comando e realidade, ou alguém depender de um comando ainda não medido para verificação de etapa |
 | P-10 | Reavaliar a isenção de `noUncheckedIndexedAccess` para `src/render/` e `src/app/`. Medido na F1-E1: os dois passam hoje com a flag ligada — o `flowField.ts` escreve por atribuição (que a flag não toca) e lê com `?? 0`. A isenção registrada no `CLAUDE.md` é portanto mais folgada do que o código precisa. Estado medido está na `FASE-0-RETROSPECTIVA.md`; a ação mora aqui, porque ninguém varre retrospectiva de fase encerrada atrás de coisa pra fazer | Alguém propor mexer na isenção, ou a F1-E6 tocar no renderer de verdade |
+| P-11 | Existem outros atores econômicos no jogo? Hoje o `World` tem **um** `money`, **um** `depositKg`, **um** `stockKg` — ator único, implícito, e nunca decidido: essa forma veio do slice de D-004 sem que a pergunta fosse feita. A visão de D-019 fala em comprar construção de terceiros a preço negociado, o que implica concorrente com patrimônio próprio. **Não construir para múltiplos atores agora** — só não cimentar ator único sem perguntar | **ANTES** de o `World` ganhar estrutura que assuma ator único, ou seja no início da **F1-E4**, que adiciona funcionários e folha. Depois de folha, imposto e save migrados por cima da suposição, desfazer fica caro |
 
 ## Pendências fechadas
 

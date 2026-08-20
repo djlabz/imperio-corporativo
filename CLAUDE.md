@@ -211,10 +211,19 @@ pesado (mesmo padrão de `random`/`now` injetáveis já usado em `npcPool.ts` e
 há erro, não há substituição por `null`. Um save adulterado pode injetar
 qualquer um dos dois num campo numérico livremente se o schema de validação
 não excluir isso explicitamente. `z.int()` do zod exclui ambos por
-construção (não é inteiro nem finito); `z.number()` sozinho aceitaria os
-dois como válidos. Não troque `z.int()` por `z.number()` em campo numérico
-de save sem repor essa guarda — `NaN` em `Money`, por exemplo, se propaga por
-toda soma/subtração subsequente e contamina o estado inteiro em silêncio.
+construção — não é inteiro nem finito.
+
+**Medido na F1-E2, corrigindo o que este parágrafo afirmava antes:** no zod
+**4.4.3** o `z.number()` sozinho **também** rejeita `NaN`, `Infinity` e
+`-Infinity`. A afirmação anterior ("`z.number()` sozinho aceitaria os dois
+como válidos") era falsa nesta versão. A diferença real entre os dois é só a
+fração: `z.number()` aceita `45.5`, `z.int()` não. Use `z.int()` de qualquer
+forma em campo numérico de save — é a guarda mais forte, e é a única que
+barra centavo fracionário —, mas não confie na justificativa errada: se
+precisar de `z.number()` em algum campo, o que você perde é a checagem de
+inteiro, não a de finitude. `NaN` em `Money` se propaga por toda
+soma/subtração subsequente e contamina o estado inteiro em silêncio, então a
+guarda importa; qual guarda a fornece é que estava mal descrito aqui.
 
 **Vite emite asset em caminho absoluto por padrão — quebra sob `file://`.**
 `base: "/"` (default do Vite) gera `<script src="/assets/...">`. Servido por

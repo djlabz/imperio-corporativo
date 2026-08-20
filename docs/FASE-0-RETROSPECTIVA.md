@@ -90,7 +90,9 @@ Já estão detalhadas no CLAUDE.md ("Armadilhas conhecidas do ambiente"); aqui
    thread pool real do Node via libuv, não como microtask. Testa-se o
    agendamento com uma função rápida injetada, não o tempo real do PBKDF2.
 3. **`NaN`/`Infinity` sobrevivem ao MessagePack sem guarda nenhuma** —
-   `z.int()` exclui os dois por construção; `z.number()` sozinho não.
+   `z.int()` exclui os dois por construção. **Corrigido na F1-E2:** o
+   `z.number()` do zod 4.4.3 também os exclui; a diferença entre os dois é só
+   a fração. Ver o parágrafo no `CLAUDE.md`.
 4. **Vite emite asset em caminho absoluto por padrão** — quebra em silêncio
    sob `file://` (`BrowserWindow.loadFile`). `base: "./"` resolve nos dois
    protocolos.

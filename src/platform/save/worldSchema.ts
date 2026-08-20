@@ -1,10 +1,16 @@
 import { z } from "zod";
 import { centavos } from "../../sim/economy/money";
 import type { RngState } from "../../sim/core/rng";
-import type { World } from "../../sim/core/World";
+import { WORLD_VERSION, type World } from "../../sim/core/World";
+import { MINING } from "../../sim/data/balance";
 import { SaveError } from "./SaveError";
 
-export const CURRENT_VERSION = 1;
+// Importada de sim/core/World, não redeclarada: até a F1-E1 o número existia
+// duplicado nos dois arquivos, com o dever de concordar e nada garantindo isso.
+// A F1-E2, que bumpou de 1 pra 2, era exatamente a etapa em que a duplicação
+// cobraria — bastaria bumpar um dos dois e o createWorld() passaria a produzir
+// um World que o próprio validador recusa.
+export const CURRENT_VERSION = WORLD_VERSION;
 
 // z.int() restringe a inteiro dentro da faixa segura (exclui NaN/Infinity
 // por construção — testei que os dois sobrevivem ao roundtrip de MessagePack
@@ -22,16 +28,36 @@ const WorldSchema = z.object({
   rngState: RngStateSchema,
   tickCount: z.int().nonnegative(),
   money: z.int(),
+  depositKg: z.int().nonnegative(),
+  stockKg: z.int().nonnegative(),
 });
 
 export type MigrationFn = (world: unknown) => unknown;
 
 /**
  * Registro de migrações: migrations[v] leva um save na versão v para v+1.
- * Vazio de propósito — só existe a v1 hoje. Quando o schema mudar, a
- * migração entra aqui; a versão atual nunca é editada no lugar.
+ * A versão atual nunca é editada no lugar.
  */
-export const migrations: Record<number, MigrationFn> = {};
+export const migrations: Record<number, MigrationFn> = {
+  /**
+   * v1 → v2 (F1-E2): entraram depositKg e stockKg. Um save v1 é anterior à
+   * mineração existir, então o depósito dele está intocado e o estoque é zero.
+   *
+   * Usa MINING.initialDepositKg em vez de um literal de propósito, e isso tem
+   * uma consequência que vale dizer em voz alta: a saída desta migração ANDA
+   * quando o balanceamento for ajustado — um save v1 migrado hoje e outro
+   * migrado depois de um ajuste recebem depósitos diferentes. Aceito porque save
+   * v1 não tem mineração nenhuma pra preservar e o jogo é pré-lançamento; o
+   * alternativo seria cravar o número aqui e violar a regra inviolável nº 4 por
+   * um caso sem consequência observável.
+   */
+  1: (world) => ({
+    ...(world as Record<string, unknown>),
+    version: 2,
+    depositKg: MINING.initialDepositKg,
+    stockKg: 0,
+  }),
+};
 
 function hasVersionField(value: unknown): value is { version: unknown } {
   return typeof value === "object" && value !== null && "version" in value;
@@ -90,5 +116,7 @@ export function migrateToCurrentVersion(
     rngState: parsed.data.rngState as RngState,
     tickCount: parsed.data.tickCount,
     money: centavos(parsed.data.money),
+    depositKg: parsed.data.depositKg,
+    stockKg: parsed.data.stockKg,
   };
 }

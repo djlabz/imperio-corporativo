@@ -36,7 +36,7 @@ describe("o teste que importa mais: RNG sobrevive à serialização REAL, não s
   it("depois de 10.000 ticks, salvar pelo pipeline completo e carregar reproduz a MESMA sequência do RNG dali em diante", async () => {
     let world = createWorld("save-rng-fidelidade");
     for (let i = 0; i < 10_000; i++) {
-      world = tick(world);
+      world = tick(world, []);
     }
 
     // Sequência de controle: o que o RNG deste estado produziria a seguir,

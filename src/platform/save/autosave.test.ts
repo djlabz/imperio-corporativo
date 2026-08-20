@@ -99,7 +99,7 @@ describe("startAutosave()", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(fake.calls[0]?.tickCount).toBe(0);
 
-    world = tick(tick(tick(world))); // o mundo avança FORA do autosave
+    world = tick(tick(tick(world, []), []), []); // o mundo avança FORA do autosave
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(fake.calls[1]?.tickCount).toBe(3);

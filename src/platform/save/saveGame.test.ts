@@ -69,7 +69,7 @@ describe("rotação de backup — só os MAX_BACKUPS mais recentes sobrevivem", 
     // 5 saves com tickCount identificável: 1, 2, 3, 4, 5.
     let world = createWorld("seed-rotacao");
     for (let i = 0; i < 5; i++) {
-      world = tick(world);
+      world = tick(world, []);
       await saveWorld(adapter, world, clock);
     }
 

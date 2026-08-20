@@ -111,7 +111,11 @@ export async function startGame(root: HTMLElement): Promise<Application> {
 
   const drawCallCounter = attachDrawCallCounter(app.renderer);
 
-  let frameState: FrameState = { world: createWorld(WORLD_SEED), loop: createFixedStepLoop() };
+  let frameState: FrameState = {
+    world: createWorld(WORLD_SEED),
+    loop: createFixedStepLoop(),
+    pendingCommands: [],
+  };
   let stats = createStatsTracker();
   let longFrames = createLongFrameTracker();
   let lastFrameTime: number | undefined;
@@ -152,7 +156,10 @@ export async function startGame(root: HTMLElement): Promise<Application> {
 
     const updateStart = performance.now();
     const tickCountBefore = frameState.world.tickCount;
-    const result = updateFrame(frameState, frameMs);
+    // Fila vazia: a F1-E2 é só sim/, sem nada na tela e sem input ligado. O
+    // clique que produz MINE/SELL entra na F1-E3 — a fronteira de D-016 já
+    // está aqui esperando por ele.
+    const result = updateFrame(frameState, frameMs, []);
     frameState = result.state;
 
     // NPC é decorativo: não mora em World, não passa por tick(). Mas o

@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
+import type { Command } from "./Command";
 import { tick } from "./tick";
 import { createWorld, type World } from "./World";
 
 const TICKS = 10_000;
+
+/**
+ * Fila determinística por tick, sem RNG: dá um golpe a cada 3 ticks e vende a
+ * cada 50. Não é ritmo de jogo — é uma sequência de comandos que exercita a
+ * economia inteira (depósito esvaziando, estoque enchendo, dinheiro entrando) de
+ * um jeito reproduzível, que é o que o determinismo de D-016 precisa provar.
+ */
+function commandsFor(tickIndex: number): readonly Command[] {
+  const queue: Command[] = [];
+  if (tickIndex % 3 === 0) queue.push({ kind: "MINE" });
+  if (tickIndex % 50 === 0) queue.push({ kind: "SELL" });
+  return queue;
+}
 
 describe("determinismo", () => {
   it("mesma seed produz o mesmo estado final após 10.000 ticks", () => {
@@ -10,8 +24,8 @@ describe("determinismo", () => {
     let worldB: World = createWorld("seed-determinismo");
 
     for (let i = 0; i < TICKS; i++) {
-      worldA = tick(worldA);
-      worldB = tick(worldB);
+      worldA = tick(worldA, []);
+      worldB = tick(worldB, []);
     }
 
     expect(worldB).toEqual(worldA);
@@ -25,12 +39,33 @@ describe("determinismo", () => {
 
     const checkpoints = new Set([1, 7, 100, 2_500, 9_999]);
     for (let i = 1; i <= TICKS; i++) {
-      worldA = tick(worldA);
-      worldB = tick(worldB);
+      worldA = tick(worldA, []);
+      worldB = tick(worldB, []);
       if (checkpoints.has(i)) {
         expect(worldB).toEqual(worldA);
       }
     }
+  });
+
+  it("mesmo World e mesma sequência de COMANDOS produzem o mesmo estado final (D-016)", () => {
+    let worldA: World = createWorld("seed-comandos");
+    let worldB: World = createWorld("seed-comandos");
+
+    const checkpoints = new Set([1, 3, 50, 151, 2_500, 9_999]);
+    for (let i = 1; i <= TICKS; i++) {
+      const queue = commandsFor(i);
+      worldA = tick(worldA, queue);
+      worldB = tick(worldB, queue);
+      if (checkpoints.has(i)) {
+        expect(worldB).toEqual(worldA);
+      }
+    }
+
+    expect(worldB).toEqual(worldA);
+    // Âncora contra o teste passar de forma vazia: a economia tem que ter mesmo
+    // acontecido. Sem isto, duas trajetórias que não fizeram nada bateriam.
+    expect(worldA.depositKg).toBeLessThan(createWorld("seed-comandos").depositKg);
+    expect(worldA.money).toBeGreaterThan(0);
   });
 
   // O teste "seeds diferentes produzem resultados diferentes" que existia

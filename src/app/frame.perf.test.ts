@@ -4,7 +4,7 @@ import { applyToContainer, createCameraState } from "../render/world/camera";
 import { buildTileGrid } from "../render/world/tileMap";
 import { buildTileMapView } from "../render/world/TileMapView";
 import { createWorld } from "../sim/core/World";
-import { updateFrame } from "./frame";
+import { updateFrame, type FrameState } from "./frame";
 import { createFixedStepLoop } from "./loop";
 
 /**
@@ -50,12 +50,16 @@ describe("orçamento de frame — pior caso, mapa vazio (Etapa 3, sem NPC)", () 
     stage.addChild(tileMapView);
     const camera = createCameraState();
 
-    let state = { world: createWorld("frame-budget"), loop: createFixedStepLoop() };
+    let state: FrameState = {
+      world: createWorld("frame-budget"),
+      loop: createFixedStepLoop(),
+      pendingCommands: [],
+    };
     const durations: number[] = [];
 
     for (let i = 0; i < WARMUP_SAMPLES + MEASURED_SAMPLES; i++) {
       const start = performance.now();
-      const result = updateFrame(state, WORST_CASE_FRAME_MS);
+      const result = updateFrame(state, WORST_CASE_FRAME_MS, []);
       applyToContainer(camera, tileMapView, 1920, 1080);
       const elapsed = performance.now() - start;
 

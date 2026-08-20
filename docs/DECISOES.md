@@ -663,6 +663,48 @@ evento que só dispare com ele presente, por exemplo.
 
 ---
 
+## D-018 · Explicação inferida não vira mecanismo
+**20/08/2026 · Fechada · formulada depois da terceira instância**
+
+Três vezes na F1-E1 e na F1-E2, um documento deste projeto descreveu o
+**mecanismo** de um problema real de forma errada. Não é a mesma coisa que D-011,
+e por isso não é adendo dele: D-011 é sobre verificação de **código**, e o remédio
+é plantar violação e confirmar que aparece. Esta é sobre **afirmação em
+documento**, e o remédio é outro.
+
+| Documento dizia | O que a medição achou |
+|---|---|
+| "o `npx` resolve por nome de pacote, então executa o homônimo do registro" — proposta como nona armadilha do `CLAUDE.md` | O `npx` está inocente. Era o `rtk` 0.44.0 filtrando a saída e sintetizando `TypeScript: No errors found` a partir de `Version 7.0.2` |
+| D-011, terceira instância: o subprojeto do Electron "compilava um programa vazio" | Compilava um programa **parcial**, 1 de 3 arquivos. Vazio de verdade se denuncia (`TS18003`, exit 2); o silencioso é sempre o parcial |
+| `CLAUDE.md`: "`z.number()` sozinho aceitaria os dois [`NaN` e `Infinity`] como válidos" | No zod 4.4.3, `z.number()` rejeita os dois. A diferença real entre ele e `z.int()` é só a fração |
+
+**O padrão, e é ele que justifica a decisão:** nos três casos a **observação**
+estava certa e a **explicação** não. O `npx` de fato imprimiu algo falso; o
+`dist-electron/` de fato saiu sem `main.cjs`; `NaN` de fato contamina `Money`. Nos
+três, a explicação foi **inferida de um sintoma real** em vez de medida. E nos
+três ela sobreviveu a pelo menos uma rodada de revisão — a do `npx` sobreviveu a
+duas, e só caiu porque alguém tentou reproduzi-la **fora** do ambiente onde ela
+tinha nascido.
+
+**A regra:** mecanismo em documento de governança é **medido ou é rotulado**. Se o
+comando que demonstra a explicação não foi rodado, escreva **"hipótese não
+confirmada"**, no padrão que a P-06 já usa nas pendências. Não há vergonha em
+registrar que o sintoma é conhecido e a causa não — há dano em registrar uma causa
+inventada com a mesma tipografia de uma medida.
+
+**A assimetria que torna isso pior que erro comum:** observação errada se corrige
+sozinha quando o sintoma volta e não bate com o texto. **Explicação errada não tem
+sintoma próprio.** Ela fica quieta no documento até alguém decidir com base nela —
+e aí o erro aparece longe, na forma de uma escolha confiante na direção oposta.
+Foi exatamente o que quase aconteceu: uma alegação de supply chain inexistente
+estava aprovada para entrar no `CLAUDE.md`, que é constituição.
+
+**Consequência prática, não teórica:** quando este log ou o `CLAUDE.md` disser
+"porque X", tem que existir um comando rodado por trás. Se você está escrevendo
+"provavelmente", "deve ser" ou "o mecanismo é" sem ter medido — pare e rotule.
+
+---
+
 ## Pendências abertas
 
 | # | Item | Volta quando |

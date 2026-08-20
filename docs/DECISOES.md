@@ -652,11 +652,27 @@ que mantém a regra do `CLAUDE.md` ("flow field, nunca A*") sem exceção. O gri
 40×30 = 1200 células. `buildFlowField()` hoje não recebe destino — vai precisar
 de parâmetro. Isso é trabalho da F1-E3, não da F1-E2.
 
-**Hipótese não confirmada, rotulada por D-018:** que recomputar o campo a cada
-clique seja barato. A versão original deste parágrafo afirmava isso como fato, e
-1200 células é argumento de ordem de grandeza, não medição. A F1-E3 mede o custo
-de uma recomputação e este parágrafo passa a carregar o número — ou a decisão de
-não recomputar por clique.
+**Medido na F1-E3, fechando a hipótese que estava rotulada aqui.** A versão
+original deste parágrafo afirmava "recomputar a cada clique é barato" como fato,
+com 1200 células como argumento — ordem de grandeza, não medição. O número:
+
+| Campo | mediana | p95 | max |
+|---|---|---|---|
+| `bearing` (travessia dos NPCs) | 0,0752ms | 0,1797ms | 0,4704ms |
+| `point` (objetivo do gerente) | 0,1185ms | 0,2584ms | 1,9771ms |
+
+500 amostras com 200 de aquecimento, no runtime do vitest, dentro do WSL. O
+orçamento de um frame a 60fps é 16,67ms, então a mediana do campo de objetivo é
+**0,7% de um frame** — e recomputar acontece por clique, não por frame. **A
+hipótese estava certa:** recomputar por clique é barato.
+
+Duas ressalvas registradas em vez de omitidas. Primeira: a medição é em WSL, e o
+adendo de D-005 estabeleceu que o nativo é mais rápido em todo N — então este
+número é **teto conservador**, não estimativa central. Segunda: o `max` de
+1,9771ms no campo de objetivo é ~16x a mediana, e o suspeito é a alocação de um
+`Float32Array` novo por chamada (2400 floats, ~9,6KB). Irrelevante na frequência
+de um clique; seria outra conversa se o campo passasse a ser recomputado por
+frame — que é justamente o que a arquitetura atual não faz.
 
 **Posição NÃO entra no `sim/`.** A posição do gerente é estado do renderer.
 Movimento é float, e float no `sim/` traz determinismo entre máquinas e migração

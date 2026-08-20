@@ -1,7 +1,7 @@
 import { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { createRng } from "../../sim/core/rng";
-import { buildFlowField } from "./flowField";
+import { buildFlowField, NPC_TRAVERSAL } from "./flowField";
 import { buildNpcPoolView, syncNpcPoolView } from "./NpcPoolView";
 import { createNpcPool, stepNpcPool } from "./npcPool";
 
@@ -67,7 +67,7 @@ describe(`orçamento de frame — pool de NPC em N=${ACTIVE_COUNT} (P-03)`, () =
       capacity: CAPACITY,
       random: () => rng.float(),
     });
-    const flowField = buildFlowField();
+    const flowField = buildFlowField(NPC_TRAVERSAL);
     const view = buildNpcPoolView(pool.capacity);
     const stage = new Container();
     stage.addChild(view.container);

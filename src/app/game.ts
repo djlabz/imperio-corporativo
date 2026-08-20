@@ -6,7 +6,7 @@ import {
   updateDebugOverlay,
   type OverlaySnapshot,
 } from "../render/debug/DebugOverlayView";
-import { buildFlowField } from "../render/npc/flowField";
+import { buildFlowField, NPC_TRAVERSAL } from "../render/npc/flowField";
 import { buildNpcPoolView, syncNpcPoolView } from "../render/npc/NpcPoolView";
 import { createNpcPool, stepNpcPool } from "../render/npc/npcPool";
 import { applyToContainer, createCameraState } from "../render/world/camera";
@@ -94,7 +94,7 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   const npcActiveCount = npcCountOverride ?? NPC_ACTIVE_COUNT;
   const npcCapacity = npcCountOverride !== undefined ? npcCountOverride : NPC_POOL_CAPACITY;
 
-  const flowField = buildFlowField();
+  const flowField = buildFlowField(NPC_TRAVERSAL);
   const npcPool = createNpcPool({ activeCount: npcActiveCount, capacity: npcCapacity });
   const npcPoolView = buildNpcPoolView(npcPool.capacity);
   worldContainer.addChild(npcPoolView.container);

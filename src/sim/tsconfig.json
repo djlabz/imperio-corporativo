@@ -22,7 +22,7 @@
   // `include` pra `["core/tick.ts"]` deu exit 0 com o núcleo descoberto.
   // Zerar o exclude aqui garante que nenhum padrão novo no raiz consiga
   // amputar este programa sem ninguém notar. A trava disso é
-  // test/sim-tsconfig.test.ts, que exige a PRESENÇA de cada módulo.
+  // test/tsconfig-projetos.test.ts, que exige a PRESENÇA de cada módulo.
   "exclude": [],
   // `include` explícito NÃO é opcional. Caminhos relativos de `include` num
   // config estendido resolvem contra a pasta de quem os ESCREVEU, não de quem

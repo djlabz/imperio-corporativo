@@ -21,7 +21,7 @@
   // O que NÃO acontece, e a descrição original errava: o programa não fica
   // vazio. Vazio o tsc denuncia (TS18003, exit 2). O modo silencioso é sempre
   // o parcial. Medido e reproduzido na F1-E2; a trava é
-  // test/sim-tsconfig.test.ts, que exige os três arquivos nomeados.
+  // test/tsconfig-projetos.test.ts, que exige os três arquivos nomeados.
   "exclude": [],
   "include": ["main.cts", "preload.cts", "electronSaveApi.ts"]
 }

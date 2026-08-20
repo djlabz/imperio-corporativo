@@ -1,0 +1,7 @@
+{
+  "deposit": { "x": 420, "y": 1140, "width": 220, "height": 160, "label": "DEPÓSITO" },
+  "refinery": { "x": 2140, "y": 340, "width": 260, "height": 180, "label": "REFINARIA" },
+  "managerSpeedPerTick": 14,
+  "reachRadius": 140,
+  "arrivalRadius": 10
+}

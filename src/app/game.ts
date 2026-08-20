@@ -7,9 +7,23 @@ import {
   type OverlaySnapshot,
 } from "../render/debug/DebugOverlayView";
 import { buildFlowField, NPC_TRAVERSAL } from "../render/npc/flowField";
+import { buildManagerView, syncManagerView } from "../render/manager/ManagerView";
+import {
+  createManager,
+  orderManager,
+  stepManager,
+  type Manager,
+  type ManagerIntent,
+} from "../render/manager/manager";
+import { buildPlaceView } from "../render/world/PlacesView";
+import { MAP, centerOf, containsPoint } from "../render/world/layout";
+import { attachWorldInput, type WorldClick } from "../render/world/worldInput";
+import { createReadout, updateReadout } from "../render/debug/ReadoutView";
+import { MINING } from "../sim/data/balance";
+import type { Command } from "../sim/core/Command";
 import { buildNpcPoolView, syncNpcPoolView } from "../render/npc/NpcPoolView";
 import { createNpcPool, stepNpcPool } from "../render/npc/npcPool";
-import { applyToContainer, createCameraState } from "../render/world/camera";
+import { applyToContainer, createCameraState, MIN_ZOOM } from "../render/world/camera";
 import { attachCameraInput } from "../render/world/cameraInput";
 import {
   computeBudgetOccupancyPercent,
@@ -72,6 +86,22 @@ function getNpcCountOverride(): number | undefined {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+/**
+ * Traduz a intenção do gerente (renderer) no comando do núcleo (D-016). É o único
+ * ponto onde as duas camadas se encontram: o `sim/` nunca soube que existe
+ * posição, e o gerente nunca soube que existe `Command`.
+ */
+function commandFor(intent: ManagerIntent | undefined): Command | undefined {
+  switch (intent) {
+    case "mine":
+      return { kind: "MINE" };
+    case "sell":
+      return { kind: "SELL" };
+    default:
+      return undefined;
+  }
+}
+
 export async function startGame(root: HTMLElement): Promise<Application> {
   // Precisa ser registrado antes de Application.init() — Culler.shared.cull()
   // funciona sem o plugin, mas o plugin é o que o Pixi recomenda pra simular
@@ -94,20 +124,90 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   const npcActiveCount = npcCountOverride ?? NPC_ACTIVE_COUNT;
   const npcCapacity = npcCountOverride !== undefined ? npcCountOverride : NPC_POOL_CAPACITY;
 
+  // Os dois lugares do mapa (D-017, complemento). Cores da paleta travada.
+  worldContainer.addChild(buildPlaceView(MAP.deposit, 0x8b5a2b, MAP.reachRadius));
+  worldContainer.addChild(buildPlaceView(MAP.refinery, 0x7a7a7a, MAP.reachRadius));
+
   const flowField = buildFlowField(NPC_TRAVERSAL);
   const npcPool = createNpcPool({ activeCount: npcActiveCount, capacity: npcCapacity });
   const npcPoolView = buildNpcPoolView(npcPool.capacity);
   worldContainer.addChild(npcPoolView.container);
 
+  const managerView = buildManagerView();
+  worldContainer.addChild(managerView.container);
+
+  const readout = createReadout();
+
   const overlay = createDebugOverlay();
   app.stage.addChild(overlay); // filho de app.stage, não de worldContainer — fica fixo na tela
+  app.stage.addChild(readout); // idem: instrumento, não parte do mundo
 
   const cameraInput = attachCameraInput(
     app.canvas,
     worldContainer,
-    createCameraState(WORLD_WIDTH / 2, WORLD_HEIGHT / 2),
+    // Zoom inicial em MIN_ZOOM: o mundo é 2560x1440 e a viewport lógica é
+    // 1920x1080, então a zoom 1 nem o depósito nem a refinaria cabem na tela —
+    // o jogador abria o jogo sem ver a si mesmo nem os dois destinos. Achado
+    // abrindo o jogo. Ver os dois extremos do ciclo é o que a F1-E3 existe pra
+    // permitir julgar; a câmera que SEGUE o gerente é candidata pra F1-E6, com o
+    // HUD, e não foi inventada aqui.
+    createCameraState(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, MIN_ZOOM),
     () => ({ width: app.screen.width, height: app.screen.height }),
   );
+
+  // O gerente começa NA FRENTE do depósito, não em cima dele.
+  //
+  // Duas razões, e a segunda foi achada abrindo o jogo: nascer longe seria só
+  // espera antes de o jogo começar; e nascer no CENTRO do retângulo o deixava
+  // invisível. O Y-sort é por pé (mesmo critério de tiles, NPCs e lugares), e um
+  // pé em y=1220 está dentro do retângulo 1140–1300, cuja base é 1300 — o prédio
+  // desenha na frente, corretamente. Uma pessoa fica de pé na frente do prédio,
+  // não dentro dele, e aí o Y-sort resolve sozinho.
+  const [depositX] = centerOf(MAP.deposit);
+  const depositFrontY = MAP.deposit.y + MAP.deposit.height + 24;
+  let manager: Manager = createManager(depositX, depositFrontY);
+
+  // Campo de OBJETIVO do gerente, separado do de travessia dos NPCs. Recomputado
+  // a cada destino novo: medido em 0,1185ms de mediana (D-017), 0,7% de um frame.
+  let managerField = buildFlowField({ kind: "point", x: depositX, y: depositFrontY });
+
+  function handleClick(click: WorldClick): void {
+    if (click.kind === "move") {
+      managerField = buildFlowField({ kind: "point", x: click.x, y: click.y });
+      manager = orderManager(manager, {
+        targetX: click.x,
+        targetY: click.y,
+        intent: "none",
+        arrivalRadius: MAP.arrivalRadius,
+      });
+      return;
+    }
+
+    // Clique esquerdo: só vale sobre um dos dois lugares. Clique esquerdo no
+    // vazio não faz nada de propósito — mover é o botão direito.
+    const target = containsPoint(MAP.deposit, click.x, click.y)
+      ? ({ place: MAP.deposit, intent: "mine" } as const)
+      : containsPoint(MAP.refinery, click.x, click.y)
+        ? ({ place: MAP.refinery, intent: "sell" } as const)
+        : undefined;
+    if (!target) return;
+
+    const [px, py] = centerOf(target.place);
+    managerField = buildFlowField({ kind: "point", x: px, y: py });
+    manager = orderManager(manager, {
+      targetX: px,
+      targetY: py,
+      intent: target.intent,
+      arrivalRadius: MAP.reachRadius,
+    });
+  }
+
+  // Sem guardar o handle: como o cameraInput acima, isto fica ligado pelo tempo de
+  // vida do processo. O jogo não tem caminho de teardown hoje.
+  attachWorldInput(app.canvas, handleClick, cameraInput.getState, () => ({
+    width: app.screen.width,
+    height: app.screen.height,
+  }));
 
   const drawCallCounter = attachDrawCallCounter(app.renderer);
 
@@ -171,6 +271,36 @@ export async function startGame(root: HTMLElement): Promise<Application> {
     for (let i = 1; i <= result.ticksRan; i++) {
       stepNpcPool(npcPool, flowField, tickCountBefore + i, camera.x, camera.y);
     }
+    // O gerente anda um passo por TICK que rodou, não por frame — mesmo
+    // princípio do pool de NPC (Regra 3: velocidade não depende do frame rate).
+    //
+    // A intenção que dispara ao chegar entra em pendingCommands em vez de ir
+    // direto pro tick deste frame. Duas razões: os ticks deste frame já rodaram,
+    // e perguntar ao acumulador quantos VÃO rodar (pra andar antes) duplicaria a
+    // decisão que updateFrame já toma, criando duas fontes pra mesma verdade. O
+    // custo é o comando esperar o próximo tick — no máximo 100ms, e a fila é
+    // exatamente o mecanismo que a F1-E2 construiu pra isso.
+    for (let i = 0; i < result.ticksRan; i++) {
+      const step = stepManager(manager, managerField, MAP.managerSpeedPerTick);
+      manager = step.manager;
+      const command = commandFor(step.fired);
+      if (command) {
+        frameState = {
+          ...frameState,
+          pendingCommands: frameState.pendingCommands.concat([command]),
+        };
+      }
+    }
+
+    syncManagerView(managerView, manager);
+    updateReadout(readout, {
+      money: frameState.world.money,
+      stockKg: frameState.world.stockKg,
+      carryCapacityKg: MINING.carryCapacityKg,
+      depositKg: frameState.world.depositKg,
+      tickCount: frameState.world.tickCount,
+      fiscalMonthTicks: MINING.fiscalMonthTicks,
+    });
     syncNpcPoolView(npcPoolView, npcPool);
 
     applyToContainer(camera, worldContainer, app.screen.width, app.screen.height);

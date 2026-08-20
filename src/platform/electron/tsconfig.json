@@ -8,11 +8,20 @@
     "outDir": "../../../dist-electron",
     "rootDir": "."
   },
-  // `extends` herda o "exclude" do tsconfig raiz por padrão — e esse exclude
-  // é justamente main.cts/preload.cts (ver comentário lá). Sem sobrescrever
-  // aqui, este subprojeto excluiria os dois únicos arquivos que precisa
-  // compilar — typecheck passaria limpo (nada pra checar) e build:win teria
-  // dist-electron/ vazio, um jeito silencioso de "funcionar" sem funcionar.
+  // `extends` herda o "exclude" do tsconfig raiz por padrão — e esse exclude é
+  // justamente main.cts/preload.cts (ver comentário lá), que chega aqui
+  // re-enraizado como ../../../src/platform/electron/*.cts e volta a casar os
+  // dois. Sem sobrescrever aqui, o `include` de TRÊS entradas abaixo perde as
+  // duas .cts e o programa monta com 1 arquivo só: electronSaveApi.ts, que não
+  // é .cts e escapa. Um arquivo basta pro tsc não ter do que reclamar, então
+  // typecheck sai 0 e build:win gera dist-electron/ com electronSaveApi.js e
+  // SEM main.cjs/preload.cjs — um jeito silencioso de "funcionar" sem
+  // funcionar. Foi esse o bug da Etapa 6 (D-011, terceira instância).
+  //
+  // O que NÃO acontece, e a descrição original errava: o programa não fica
+  // vazio. Vazio o tsc denuncia (TS18003, exit 2). O modo silencioso é sempre
+  // o parcial. Medido e reproduzido na F1-E2; a trava é
+  // test/sim-tsconfig.test.ts, que exige os três arquivos nomeados.
   "exclude": [],
   "include": ["main.cts", "preload.cts", "electronSaveApi.ts"]
 }

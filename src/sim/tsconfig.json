@@ -14,10 +14,15 @@
   },
   // `exclude` vazio é profilaxia, não necessidade: o exclude do raiz hoje é só
   // `src/platform/electron/*.cts`, que não alcança src/sim/. Mas foi justamente
-  // herdar o exclude do raiz que fez o subprojeto do Electron compilar zero
-  // arquivo com `tsc --noEmit` saindo 0 em silêncio (ver D-011, terceira
-  // instância do padrão). Zerar aqui garante que nenhum padrão novo no raiz
-  // consiga esvaziar este programa sem ninguém notar.
+  // herdar o exclude do raiz que quebrou o subprojeto do Electron na Etapa 6
+  // (ver D-011, terceira instância do padrão) — e o perigo NÃO é o programa
+  // ficar vazio: vazio o tsc denuncia com TS18003 e exit 2. O perigo é o
+  // programa ficar PARCIAL. Lá sobraram 1 de 3 arquivos e o tsc saiu 0 em
+  // silêncio; a mesma forma reapareceu aqui na F1-E2, quando mutar este
+  // `include` pra `["core/tick.ts"]` deu exit 0 com o núcleo descoberto.
+  // Zerar o exclude aqui garante que nenhum padrão novo no raiz consiga
+  // amputar este programa sem ninguém notar. A trava disso é
+  // test/sim-tsconfig.test.ts, que exige a PRESENÇA de cada módulo.
   "exclude": [],
   // `include` explícito NÃO é opcional. Caminhos relativos de `include` num
   // config estendido resolvem contra a pasta de quem os ESCREVEU, não de quem

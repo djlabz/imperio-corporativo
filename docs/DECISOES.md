@@ -347,7 +347,7 @@ que o teste certo falha, antes de restaurar.
 | Fuzz sem seed é irreproduzível por construção | O fuzz de `applyRate` usava `Math.random()`. Se ele achasse uma divergência real de precisão, avisaria que existe bug e recusaria dizer qual caso o produziu. Trocado por três seeds literais do PRNG do projeto, com a mensagem de falha carregando seed, índice da amostra, `money`, `bps` e os dois resultados — reproduzir passou a ser copiar um número. Bônus: `Math.random()` em `src/sim/**` é barrado pelo lint de D-006, então o teste também deixava `pnpm lint` vermelho |
 | Relatório de etapa não é verificação | As Etapas 4 e 5 reportaram "lint ✅ 0 diagnósticos" com o lint vermelho desde `ea9717d`. O comando não tinha sido rodado; o relatório repetiu o estado esperado, não o medido. Correção de processo: rodar os cinco comandos (`typecheck`, `lint`, `test`, `build`, `format:check`) um por um e colar a saída bruta, nunca o resumo |
 | Orçamento calibrado errado por confundir inclinação com total | Primeira tentativa do orçamento de P-03 usou o custo MARGINAL por NPC (a inclinação entre pontos da Etapa 4) como se fosse o custo TOTAL por frame em N=500 — resultou num orçamento ~40x acima do real. Duas mutações (chamar `sampleFlowField` 31x mais, e inflar `syncNpcPoolView` em 10x) passaram verde quando não deveriam. Corrigido medindo o baseline de verdade neste mesmo runtime (~0.107ms) antes de fixar o número, e confirmado com uma mutação 2x mais forte (20x) que falha de forma clara e reprodutível |
-| tsconfig `extends` herda `exclude` do pai | O subprojeto `src/platform/electron/tsconfig.json` (Etapa 6) precisa compilar exatamente os dois arquivos (`main.cts`/`preload.cts`) que o tsconfig raiz exclui (ver D-006 nesta etapa). Sem `"exclude": []` explícito no filho, `extends` herdava o exclude do pai e o subprojeto compilava um projeto vazio — `tsc --noEmit` passava limpo (nada pra checar) e `tsc -p ...` sem `--noEmit` não emitia nada, os dois em silêncio. Pego rodando o build de verdade e vendo `dist-electron/` sem `main.cjs`/`preload.cjs`, não confiando no typecheck limpo sozinho |
+| tsconfig `extends` herda `exclude` do pai | O subprojeto `src/platform/electron/tsconfig.json` (Etapa 6) precisa compilar os arquivos que o tsconfig raiz exclui (`main.cts`/`preload.cts`, ver D-006 nesta etapa). Sem `"exclude": []` explícito no filho, `extends` herdava o exclude do pai — que, re-enraizado, volta a casar os dois `.cts` — e o programa montava com **1 dos 3 arquivos do `include`**: `electronSaveApi.ts` não é `.cts`, escapou, e sozinho bastava pro `tsc` sair 0 em silêncio, com e sem `--noEmit`. Pego rodando o build de verdade e vendo `dist-electron/` com um `.js` solto e sem `main.cjs`/`preload.cjs`, não confiando no typecheck limpo sozinho. **Mecanismo corrigido na F1-E2** — ver item 3 da lista abaixo; a descrição original dizia "programa vazio", e programa vazio de verdade não é silencioso |
 
 **Princípio:** teste que passaria com o código quebrado é pior que teste ausente —
 dá confiança falsa. Ausente você sabe que não tem cobertura.
@@ -366,9 +366,33 @@ instâncias, em ordem:
    sobreviver a dois relatórios de etapa sem ninguém notar (linha "Relatório
    de etapa não é verificação" acima).
 3. `exclude` herdado do `extends` (Etapa 6) — o subprojeto do Electron
-   compilava um programa vazio, e tanto `tsc --noEmit` quanto `tsc` sem essa
-   flag terminavam em exit 0, sem diferenciar "nada pra checar" de "checou e
-   passou".
+   compilava um programa **parcial**, e tanto `tsc --noEmit` quanto `tsc` sem
+   essa flag terminavam em exit 0, sem diferenciar "checou um subconjunto" de
+   "checou tudo e passou".
+
+**Mecanismo do item 3, corrigido na F1-E2 e medido em vez de suposto.** A
+descrição original dizia "programa vazio". Programa vazio **de verdade se
+denuncia**: o `tsc` 7.0.2 emite `TS18003: No inputs were found in config file`
+e sai **2**, tanto quando o `include` não casa nada quanto quando o `exclude`
+herdado remove tudo o que o `include` casou — os dois casos medidos neste repo.
+
+O modo perigoso é o programa **parcial**: algo sobrevive ao `exclude`, o
+programa monta com um subconjunto, e o `tsc` sai **0 em silêncio**. No Electron
+da Etapa 6 foram **1 de 3** arquivos. O `exclude` do raiz
+(`src/platform/electron/*.cts`) é herdado re-enraizado contra a pasta do filho
+(`../../../src/platform/electron/*.cts`), o que o faz voltar a casar exatamente
+os dois `.cts`; `electronSaveApi.ts` não é `.cts`, escapou, e um arquivo no
+programa é o bastante pro `tsc` não ter do que reclamar. Reproduzido na F1-E2:
+`files: ["./electronSaveApi.ts"]`, exit 0 com e sem `--noEmit`, e
+`dist-electron/` com `electronSaveApi.js` e nada mais.
+
+**Isto reforça o princípio abaixo em vez de enfraquecê-lo.** As duas instâncias
+independentes que este projeto registra — o Electron na Etapa 6 e o `src/sim/`
+na F1-E2 (P-08, achado por mutação ao escrever `test/sim-tsconfig.test.ts`)
+— são a **mesma forma parcial**, encontradas por caminhos diferentes com dois
+meses de distância, sem que a segunda soubesse da primeira. Um modo de falha que
+reaparece sozinho assim não é acidente de configuração: é o que a defesa
+automatizada deste projeto tem que assumir como recorrente.
 
 Nos três casos a ferramenta funcionava perfeitamente — o problema nunca foi a
 regra, foi a certeza de que ela estava mesmo olhando pro arquivo certo.

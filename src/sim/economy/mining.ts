@@ -3,15 +3,26 @@ import type { MiningBalance } from "../data/balance";
 import { add, mul } from "./money";
 
 /**
- * Um golpe de picareta. O depósito é finito: extrai `kgPerStrike`, ou o que
- * sobrou se for menos que isso.
+ * Um golpe de picareta. Extrai o MENOR entre três coisas: o tamanho do golpe, o
+ * que sobrou no depósito, e o espaço livre na carga.
  *
- * O `Math.min` não é defensivo por precaução — é a regra. Sem ele, o depósito
- * fica negativo e o jogador mina minério que não existe, que é bug de economia
- * silencioso: nada estoura, o número só fica errado pra sempre.
+ * Nenhum dos três limites é defensivo por precaução — os três são a regra:
+ *
+ * - sem o teto do depósito, ele fica negativo e o jogador mina minério que não
+ *   existe. Bug de economia silencioso: nada estoura, o número só fica errado.
+ * - sem o teto da CARGA, a jogada ótima é minerar o depósito inteiro e caminhar
+ *   uma vez só. O atrito de D-017 deixa de existir, e com ele o motivo de o
+ *   gerente ter corpo.
+ *
+ * O `Math.max(0, ...)` no espaço livre não é redundante: um save gravado quando
+ * `carryCapacityKg` era maior pode ter `stockKg` acima do teto atual —
+ * balanceamento não é dado de save e mexer nele não invalida save nenhum. Sem o
+ * clamp, o espaço livre fica negativo, vira o menor dos três, e `extracted`
+ * negativo DEVOLVE minério pro depósito enquanto reduz o estoque.
  */
 export function mine(world: World, balance: MiningBalance): World {
-  const extracted = Math.min(balance.kgPerStrike, world.depositKg);
+  const freeSpace = Math.max(0, balance.carryCapacityKg - world.stockKg);
+  const extracted = Math.min(balance.kgPerStrike, world.depositKg, freeSpace);
   if (extracted === 0) {
     return world;
   }

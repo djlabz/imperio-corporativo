@@ -7,6 +7,7 @@ function valid(overrides: Record<string, unknown> = {}): unknown {
     kgPerStrike: 2,
     initialDepositKg: 5000,
     pricePerKgCents: 45,
+    carryCapacityKg: 50,
     ...overrides,
   };
 }
@@ -55,6 +56,7 @@ describe("parseMiningBalance()", () => {
     expect(() => parseMiningBalance(valid({ fiscalMonthTicks: 0 }))).toThrow(/fiscalMonthTicks/);
     expect(() => parseMiningBalance(valid({ kgPerStrike: 0 }))).toThrow(/kgPerStrike/);
     expect(() => parseMiningBalance(valid({ pricePerKgCents: 0 }))).toThrow(/pricePerKgCents/);
+    expect(() => parseMiningBalance(valid({ carryCapacityKg: 0 }))).toThrow(/carryCapacityKg/);
     expect(() => parseMiningBalance(valid({ initialDepositKg: -1 }))).toThrow(/initialDepositKg/);
   });
 
@@ -66,5 +68,6 @@ describe("parseMiningBalance()", () => {
     expect(MINING.kgPerStrike).toBeGreaterThan(0);
     expect(MINING.pricePerKg).toBeGreaterThan(0);
     expect(MINING.initialDepositKg).toBeGreaterThanOrEqual(0);
+    expect(MINING.carryCapacityKg).toBeGreaterThan(0);
   });
 });

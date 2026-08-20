@@ -16,6 +16,12 @@ export interface MiningBalance {
   readonly kgPerStrike: number;
   readonly initialDepositKg: number;
   readonly pricePerKg: Money;
+  /**
+   * Quanto o gerente carrega de uma vez. É o que obriga a viagem: sem teto, a
+   * jogada ótima é minerar o depósito inteiro e caminhar UMA vez, e o atrito de
+   * D-017 simplesmente não acontece.
+   */
+  readonly carryCapacityKg: number;
 }
 
 // z.int(), não z.number(): a diferença que importa aqui é a FRAÇÃO. Os dois
@@ -28,6 +34,7 @@ const MiningBalanceSchema = z.object({
   kgPerStrike: z.int().positive(),
   initialDepositKg: z.int().nonnegative(),
   pricePerKgCents: z.int().positive(),
+  carryCapacityKg: z.int().positive(),
 });
 
 /**
@@ -46,6 +53,7 @@ export function parseMiningBalance(raw: unknown): MiningBalance {
     kgPerStrike: parsed.data.kgPerStrike,
     initialDepositKg: parsed.data.initialDepositKg,
     pricePerKg: centavos(parsed.data.pricePerKgCents),
+    carryCapacityKg: parsed.data.carryCapacityKg,
   };
 }
 

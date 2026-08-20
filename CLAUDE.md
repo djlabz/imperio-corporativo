@@ -22,6 +22,21 @@ agora é o trabalho, não o que se evita.
 **O passo que importa:** o primeiro imposto tem que doer. Se o jogador passar
 batido por ele, o slice falhou e se reescreve antes de adicionar conteúdo.
 
+## Roteiro da Fase 1 (roteiro, não compromisso)
+
+```
+F1-E1 — higiene de transição (concluída)
+F1-E2 — economia no sim/: comandos, extração, estoque, venda
+F1-E3 — jogável cru: clique na tela e leitura numérica, para sentir o ritmo
+F1-E4 — contratação e folha
+F1-E5 — o imposto
+F1-E6 — HUD e o teste dos 20 minutos
+```
+
+Isto orienta, não autoriza: nenhuma etapa daqui começa sem bloco meu. Já mudou
+uma vez — E3 e E4 trocaram de lugar quando ficou decidido que a extração é por
+clique manual, porque 3 min por mês fiscal é palpite que só jogando se confirma.
+
 ---
 
 ## Regras invioláveis

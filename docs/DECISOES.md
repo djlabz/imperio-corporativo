@@ -593,6 +593,76 @@ documentos que valem sempre.
 
 ---
 
+## D-016 · Fronteira de comandos: `tick(world, commands)`
+**20/08/2026 · Fechada**
+
+Clique é I/O, e `src/sim/` é puro (regra inviolável nº 1). Extração por clique
+manual (F1-E2) exige um caminho pra intenção do jogador entrar no núcleo sem que
+o núcleo saiba que existe mouse. A assinatura do tick passa a ser:
+
+```ts
+tick(world: World, commands: readonly Command[]): World
+```
+
+`Command` é união discriminada, serializável, sem função e sem classe — a mesma
+restrição que o `World` já carrega. Dois comandos na F1-E2: `{ kind: "MINE" }`,
+um golpe de picareta, e `{ kind: "SELL" }`, que vende o estoque inteiro.
+
+**Motivo:** determinismo e pureza. Mesmo `World` mais a mesma sequência de
+comandos produz o mesmo `World` — que é a regra inviolável nº 5 estendida pra
+incluir input, e é o que permite testar economia no vitest, rodar o `sim/` num
+Web Worker e reaproveitá-lo num servidor Node se o multiplayer acontecer.
+
+**A fila não mora no `World`, entra como argumento.** O `World` é o que vai pro
+save; fila pendente no instante do save é estado ambíguo — salvar um comando não
+processado obrigaria a decidir, na migração, se ele conta ou não. Como argumento
+a pergunta nem se coloca.
+
+**Sem parâmetro opcional.** `commands` é obrigatório. Fila opcional é convite pra
+alguém esquecer de passar e não notar — todos os chamadores foram atualizados na
+F1-E2 (cinco lugares, um deles produção).
+
+**Consequência aditiva, e é por isso que a fronteira existe:** pré-condição de
+comando é camada de fora. Quando o gerente ganhar corpo (D-017), quem decide se
+ele está perto o bastante da rocha é a camada de input, que só então emite
+`MINE`. O `sim/` continua só recebendo o comando, e a regra inviolável nº 1 fica
+intacta sem exceção nenhuma.
+
+---
+
+## D-017 · O gerente tem corpo, e anda por clique no destino
+**20/08/2026 · Fechada**
+
+O jogador **é** o gerente, com corpo no mundo, e se move por clique no destino
+ao estilo League of Legends: clica, ele caminha até lá com animação. Não é câmera
+livre sobre uma operação sem dono.
+
+**Motivo — o tempo de caminhada é o atrito que dá sentido à automação.** Com
+extração instantânea, contratar é só "mais rápido"; com corpo, contratar é
+**parar de andar**. O alívio vira físico em vez de virar número numa tabela. É a
+mesma lógica de D-004 pro imposto: a mecânica só ensina se ela doer primeiro.
+
+**Compromisso que vem junto, e é o que torna esta decisão cobrável:** andar tem
+que deixar de importar. Atrito de início de jogo, não imposto permanente. **Se
+aos 40 minutos o jogador ainda atravessa o mapa a pé para vender, o desenho
+falhou e se revisa.**
+
+**Consequência técnica:** o destino do clique é o objetivo de um flow field, o
+que mantém a regra do `CLAUDE.md` ("flow field, nunca A*") sem exceção. O grid é
+40×30 = 1200 células; recomputar o campo a cada clique é barato.
+`buildFlowField()` hoje não recebe destino — vai precisar de parâmetro. Isso é
+trabalho da F1-E3, não da F1-E2.
+
+**Posição NÃO entra no `sim/`.** A posição do gerente é estado do renderer.
+Movimento é float, e float no `sim/` traz determinismo entre máquinas e migração
+de save que não são necessários agora. A camada de input decide se está perto o
+bastante e emite `MINE` (ver D-016); o `sim/` só recebe o comando.
+
+**Condição para revisar:** o `sim/` precisar saber onde o gerente está — um
+evento que só dispare com ele presente, por exemplo.
+
+---
+
 ## Pendências abertas
 
 | # | Item | Volta quando |

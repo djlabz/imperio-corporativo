@@ -1,6 +1,6 @@
 {
   "fiscalMonthTicks": 1800,
-  "kgPerStrike": 2,
+  "kgPerStrike": 10,
   "initialDepositKg": 5000,
   "pricePerKgCents": 45,
   "carryCapacityKg": 50

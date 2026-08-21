@@ -30,6 +30,7 @@ const WorldSchema = z.object({
   money: z.int(),
   depositKg: z.int().nonnegative(),
   stockKg: z.int().nonnegative(),
+  employeeCount: z.int().nonnegative(),
 });
 
 export type MigrationFn = (world: unknown) => unknown;
@@ -56,6 +57,17 @@ export const migrations: Record<number, MigrationFn> = {
     version: 2,
     depositKg: MINING.initialDepositKg,
     stockKg: 0,
+  }),
+
+  /**
+   * v2 → v3 (F1-E4): entrou employeeCount. Um save v2 é anterior a funcionário
+   * existir, então zero é o único valor correto — não "o balanceamento atual",
+   * que nem existia quando o save foi gravado.
+   */
+  2: (world) => ({
+    ...(world as Record<string, unknown>),
+    version: 3,
+    employeeCount: 0,
   }),
 };
 
@@ -118,5 +130,6 @@ export function migrateToCurrentVersion(
     money: centavos(parsed.data.money),
     depositKg: parsed.data.depositKg,
     stockKg: parsed.data.stockKg,
+    employeeCount: parsed.data.employeeCount,
   };
 }

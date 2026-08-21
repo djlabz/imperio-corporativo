@@ -16,6 +16,7 @@ function validRawWorld(overrides: Record<string, unknown> = {}): unknown {
     money: 12_345,
     depositKg: 4_000,
     stockKg: 12,
+    employeeCount: 3,
     ...overrides,
   };
 }
@@ -28,6 +29,20 @@ function v1RawWorld(overrides: Record<string, unknown> = {}): unknown {
     rngState: RNG_STATE,
     tickCount: 900,
     money: 55_555,
+    ...overrides,
+  };
+}
+
+/** Um save v2 de verdade: a forma que o jogo gravava antes da F1-E4 existir. */
+function v2RawWorld(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    version: 2,
+    seed: "seed-v2",
+    rngState: RNG_STATE,
+    tickCount: 1_234,
+    money: 88_888,
+    depositKg: 3_500,
+    stockKg: 20,
     ...overrides,
   };
 }
@@ -60,6 +75,7 @@ describe("migrateToCurrentVersion() — caminho feliz", () => {
     expect(world.money).toBe(12_345);
     expect(world.depositKg).toBe(4_000);
     expect(world.stockKg).toBe(12);
+    expect(world.employeeCount).toBe(3);
     expect(world.rngState).toEqual(RNG_STATE);
   });
 
@@ -126,15 +142,25 @@ describe("migrateToCurrentVersion() — caminhos ruins", () => {
     expect(() => migrateToCurrentVersion(validRawWorld({ depositKg: -1 }))).toThrow(SaveError);
     expect(() => migrateToCurrentVersion(validRawWorld({ stockKg: -1 }))).toThrow(SaveError);
   });
+
+  it("rejeita employeeCount negativo ou fracionário", () => {
+    expect(() => migrateToCurrentVersion(validRawWorld({ employeeCount: -1 }))).toThrow(SaveError);
+    expect(() => migrateToCurrentVersion(validRawWorld({ employeeCount: 1.5 }))).toThrow(SaveError);
+  });
 });
 
 describe("migração v1 → v2 (F1-E2: depositKg e stockKg)", () => {
   it("sobe um save v1 e preenche os campos novos", () => {
+    // migrateToCurrentVersion sobe até CURRENT_VERSION (3 desde a F1-E4), não
+    // para em 2 — a etapa que introduziu depositKg/stockKg não sabia disso
+    // ainda, mas o comportamento real sempre foi "até o topo", nunca "até a
+    // próxima versão". employeeCount entra aqui de carona, pela migração 2→3.
     const world = migrateToCurrentVersion(v1RawWorld());
 
-    expect(world.version).toBe(2);
+    expect(world.version).toBe(3);
     expect(world.depositKg).toBe(MINING.initialDepositKg);
     expect(world.stockKg).toBe(0);
+    expect(world.employeeCount).toBe(0);
   });
 
   it("preserva o que já existia no save v1 — a migração não é uma reinicialização", () => {
@@ -146,7 +172,7 @@ describe("migração v1 → v2 (F1-E2: depositKg e stockKg)", () => {
     expect(world.rngState).toEqual(RNG_STATE);
   });
 
-  it("um save v1 REAL, pelo pipeline completo, carrega como v2", async () => {
+  it("um save v1 REAL, pelo pipeline completo, sobe até v3 (a versão atual, não só v2)", async () => {
     // encodeRaw existe justamente pra isto: montar um envelope válido a partir
     // de um objeto que não é o World de hoje. Passa por MessagePack, deflate,
     // XOR e HMAC de verdade, e volta por decodeWorld — que é o caminho que o
@@ -155,11 +181,56 @@ describe("migração v1 → v2 (F1-E2: depositKg e stockKg)", () => {
     const envelope = await encodeRaw(v1RawWorld());
     const world = await decodeWorld(envelope);
 
-    expect(world.version).toBe(2);
+    expect(world.version).toBe(3);
     expect(world.depositKg).toBe(MINING.initialDepositKg);
     expect(world.stockKg).toBe(0);
+    expect(world.employeeCount).toBe(0);
     expect(world.money).toBe(55_555);
     expect(world.tickCount).toBe(900);
+  });
+});
+
+describe("migração v2 → v3 (F1-E4: employeeCount)", () => {
+  it("sobe um save v2 e preenche employeeCount com zero", () => {
+    const world = migrateToCurrentVersion(v2RawWorld());
+
+    expect(world.version).toBe(3);
+    expect(world.employeeCount).toBe(0);
+  });
+
+  it("preserva o que já existia no save v2 — a migração não é uma reinicialização", () => {
+    const world = migrateToCurrentVersion(v2RawWorld());
+
+    expect(world.seed).toBe("seed-v2");
+    expect(world.tickCount).toBe(1_234);
+    expect(world.money).toBe(88_888);
+    expect(world.depositKg).toBe(3_500);
+    expect(world.stockKg).toBe(20);
+    expect(world.rngState).toEqual(RNG_STATE);
+  });
+
+  it("um save v2 REAL, pelo pipeline completo, carrega como v3", async () => {
+    // Mesmo raciocínio do teste equivalente pro v1: sem passar pelo pipeline de
+    // verdade (MessagePack, deflate, XOR, HMAC), as duas asserções acima provam
+    // só a função de migração, não o carregamento que o jogo de fato usa.
+    const envelope = await encodeRaw(v2RawWorld());
+    const world = await decodeWorld(envelope);
+
+    expect(world.version).toBe(3);
+    expect(world.employeeCount).toBe(0);
+    expect(world.depositKg).toBe(3_500);
+    expect(world.stockKg).toBe(20);
+    expect(world.money).toBe(88_888);
+    expect(world.tickCount).toBe(1_234);
+  });
+
+  it("um save v1 sobe direto até v3, em cadeia — v1→v2 dá depósito cheio, v2→v3 dá zero funcionários", () => {
+    const world = migrateToCurrentVersion(v1RawWorld());
+
+    expect(world.version).toBe(3);
+    expect(world.depositKg).toBe(MINING.initialDepositKg);
+    expect(world.stockKg).toBe(0);
+    expect(world.employeeCount).toBe(0);
   });
 });
 
@@ -179,7 +250,7 @@ describe("migrateToCurrentVersion() — esqueleto de migração em cadeia", () =
     };
     migrations[2] = (state) => {
       callOrder.push(2);
-      return { ...(state as Record<string, unknown>), version: 3 };
+      return { ...(state as Record<string, unknown>), version: 3, employeeCount: 0 };
     };
 
     const world = migrateToCurrentVersion(v1RawWorld(), 3);
@@ -188,6 +259,6 @@ describe("migrateToCurrentVersion() — esqueleto de migração em cadeia", () =
   });
 
   it("CURRENT_VERSION acompanha WORLD_VERSION do sim/, não é um número solto aqui", () => {
-    expect(CURRENT_VERSION).toBe(2);
+    expect(CURRENT_VERSION).toBe(3);
   });
 });

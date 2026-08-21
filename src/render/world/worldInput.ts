@@ -15,6 +15,12 @@ export type WorldClick =
   | { readonly kind: "move"; readonly x: number; readonly y: number }
   | { readonly kind: "act"; readonly x: number; readonly y: number };
 
+/** Ponto do mundo sob o ponteiro. `undefined` = ponteiro saiu do canvas. */
+export interface WorldPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
 /**
  * Converte pixel de tela em ponto do mundo. É a inversa exata de
  * `applyToContainer` em camera.ts — se um dos dois mudar, o outro tem que mudar,
@@ -38,9 +44,15 @@ export interface WorldInputHandle {
 }
 
 /**
- * Traduz clique em intenção de mundo. Não decide NADA sobre o jogo: só diz
- * "clique de mover em (x, y)" ou "clique de agir em (x, y)". Quem resolve se
- * aquele ponto é o depósito, e se o gerente está perto, é a camada de app.
+ * Traduz clique — e agora também a posição do ponteiro — em intenção de mundo.
+ * Não decide NADA sobre o jogo: só diz "clique de mover em (x, y)", "clique de
+ * agir em (x, y)" ou "o ponteiro está em (x, y)". Quem resolve se aquele ponto é
+ * o depósito, e se o gerente está perto, é a camada de app.
+ *
+ * `onHover` usa exatamente a mesma conversão tela→mundo do clique. É de propósito:
+ * se o destaque de hover acender sobre um retângulo, o clique naquele pixel cai
+ * no mesmo lugar, por construção. Um caminho separado pro hover poderia acender
+ * num lugar e clicar em outro — que é o pior resultado possível pra uma affordance.
  *
  * Sem teste automatizado da fiação de DOM, mesmo critério de cameraInput.ts: a
  * matemática que vale testar (screenToWorld) é pura e está coberta à parte.
@@ -48,12 +60,25 @@ export interface WorldInputHandle {
 export function attachWorldInput(
   canvas: HTMLCanvasElement,
   onClick: (click: WorldClick) => void,
+  onHover: (point: WorldPoint | undefined) => void,
   getCamera: () => CameraState,
   getViewSize: () => { width: number; height: number },
 ): WorldInputHandle {
   let downX = 0;
   let downY = 0;
   let downButton = -1;
+
+  function toWorld(event: PointerEvent): readonly [number, number] {
+    const rect = canvas.getBoundingClientRect();
+    const { width, height } = getViewSize();
+    return screenToWorld(
+      getCamera(),
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+      width,
+      height,
+    );
+  }
 
   function onPointerDown(event: PointerEvent): void {
     downX = event.clientX;
@@ -67,15 +92,7 @@ export function attachWorldInput(
     downButton = -1;
     if (moved > DRAG_THRESHOLD_PX) return; // foi arraste (pan), não clique
 
-    const rect = canvas.getBoundingClientRect();
-    const { width, height } = getViewSize();
-    const [x, y] = screenToWorld(
-      getCamera(),
-      event.clientX - rect.left,
-      event.clientY - rect.top,
-      width,
-      height,
-    );
+    const [x, y] = toWorld(event);
 
     if (event.button === RIGHT_MOUSE_BUTTON) {
       onClick({ kind: "move", x, y });
@@ -84,13 +101,26 @@ export function attachWorldInput(
     }
   }
 
+  function onPointerMove(event: PointerEvent): void {
+    const [x, y] = toWorld(event);
+    onHover({ x, y });
+  }
+
+  function onPointerLeave(): void {
+    onHover(undefined);
+  }
+
   canvas.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerleave", onPointerLeave);
 
   return {
     destroy(): void {
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
     },
   };
 }

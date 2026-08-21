@@ -15,10 +15,29 @@ import {
   type Manager,
   type ManagerIntent,
 } from "../render/manager/manager";
-import { buildPlaceView } from "../render/world/PlacesView";
+import { buildPlaceView, setPlaceHovered } from "../render/world/PlacesView";
 import { MAP, centerOf, containsPoint } from "../render/world/layout";
-import { attachWorldInput, type WorldClick } from "../render/world/worldInput";
+import { attachWorldInput, type WorldClick, type WorldPoint } from "../render/world/worldInput";
 import { createReadout, updateReadout } from "../render/debug/ReadoutView";
+import { createEventLine, showEvent } from "../render/debug/EventLineView";
+import {
+  actionOrderLine,
+  arrivalLine,
+  destinationLabel,
+  drainActions,
+  emptyClickLine,
+  EMPTY_ACTION_QUEUE,
+  moveLine,
+  npcToggleLine,
+  queueAction,
+  sampleEconomy,
+  type ActionQueue,
+} from "../render/debug/eventLog";
+import {
+  buildClickMarkerView,
+  showClickMarker,
+  syncClickMarker,
+} from "../render/world/ClickMarkerView";
 import { MINING } from "../sim/data/balance";
 import type { Command } from "../sim/core/Command";
 import { buildNpcPoolView, syncNpcPoolView } from "../render/npc/NpcPoolView";
@@ -93,19 +112,24 @@ function getNpcCountOverride(): number | undefined {
 }
 
 /**
+ * As intenções do gerente que viram comando. "none" (o clique direito: andar e
+ * parar) fica de fora por construção, e é isso que deixa a fila de comandos e a
+ * fila de ações da linha de evento andarem sempre em par — as duas são
+ * alimentadas pelo mesmo `if`, não por duas checagens que precisam concordar.
+ */
+type ActionIntent = "mine" | "sell";
+
+function isActionIntent(intent: ManagerIntent | undefined): intent is ActionIntent {
+  return intent === "mine" || intent === "sell";
+}
+
+/**
  * Traduz a intenção do gerente (renderer) no comando do núcleo (D-016). É o único
  * ponto onde as duas camadas se encontram: o `sim/` nunca soube que existe
  * posição, e o gerente nunca soube que existe `Command`.
  */
-function commandFor(intent: ManagerIntent | undefined): Command | undefined {
-  switch (intent) {
-    case "mine":
-      return { kind: "MINE" };
-    case "sell":
-      return { kind: "SELL" };
-    default:
-      return undefined;
-  }
+function commandFor(intent: ActionIntent): Command {
+  return intent === "mine" ? { kind: "MINE" } : { kind: "SELL" };
 }
 
 export async function startGame(root: HTMLElement): Promise<Application> {
@@ -131,8 +155,10 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   const npcCapacity = npcCountOverride !== undefined ? npcCountOverride : NPC_POOL_CAPACITY;
 
   // Os dois lugares do mapa (D-017, complemento). Cores da paleta travada.
-  worldContainer.addChild(buildPlaceView(MAP.deposit, 0x8b5a2b, MAP.reachRadius));
-  worldContainer.addChild(buildPlaceView(MAP.refinery, 0x7a7a7a, MAP.reachRadius));
+  const depositView = buildPlaceView(MAP.deposit, 0x8b5a2b, MAP.reachRadius);
+  const refineryView = buildPlaceView(MAP.refinery, 0x7a7a7a, MAP.reachRadius);
+  worldContainer.addChild(depositView.container);
+  worldContainer.addChild(refineryView.container);
 
   const flowField = buildFlowField(NPC_TRAVERSAL);
   const npcPool = createNpcPool({ activeCount: npcActiveCount, capacity: npcCapacity });
@@ -142,11 +168,16 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   const managerView = buildManagerView();
   worldContainer.addChild(managerView.container);
 
+  const clickMarker = buildClickMarkerView();
+  worldContainer.addChild(clickMarker.graphics);
+
   const readout = createReadout();
+  const eventLine = createEventLine();
 
   const overlay = createDebugOverlay();
   app.stage.addChild(overlay); // filho de app.stage, não de worldContainer — fica fixo na tela
   app.stage.addChild(readout); // idem: instrumento, não parte do mundo
+  app.stage.addChild(eventLine); // idem
 
   const viewSize = (): { width: number; height: number } => ({
     width: app.screen.width,
@@ -201,40 +232,96 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   // a cada destino novo: medido em 0,1185ms de mediana (D-017), 0,7% de um frame.
   let managerField = buildFlowField({ kind: "point", x: depositX, y: depositFrontY });
 
+  /**
+   * Rótulo do destino da ordem ATUAL, só pra linha de evento poder dizer "chegou
+   * em DEPÓSITO" em vez de "chegou". Fica aqui e não em ManagerOrder porque o
+   * gerente não tem por que saber o nome do lugar pra onde anda.
+   */
+  let currentDestinationLabel = MAP.deposit.label;
+
+  /** Ações já disparadas cujo comando ainda não rodou no tick. Ver eventLog.ts. */
+  let actionQueue: ActionQueue = EMPTY_ACTION_QUEUE;
+
   function handleClick(click: WorldClick): void {
+    // Marcador sempre, nos dois botões: é o que responde "o jogo entendeu o lugar
+    // que eu mirei?" mesmo quando o clique não produz ação nenhuma.
+    showClickMarker(clickMarker, click.x, click.y, performance.now());
+
+    // Havia ordem em curso? Clique novo cancela a anterior (convenção de RTS, e
+    // é o que orderManager faz). Sem dizer isso, dez cliques seguidos com o
+    // gerente longe produzem dez ordens e UM resultado, e o log não explica por quê.
+    const replacedOrder = manager.order !== undefined;
+
     if (click.kind === "move") {
       managerField = buildFlowField({ kind: "point", x: click.x, y: click.y });
+      currentDestinationLabel = destinationLabel(click.x, click.y);
       manager = orderManager(manager, {
         targetX: click.x,
         targetY: click.y,
         intent: "none",
         arrivalRadius: MAP.arrivalRadius,
       });
+      showEvent(eventLine, moveLine(click.x, click.y, replacedOrder));
       return;
     }
 
     // Clique esquerdo: só vale sobre um dos dois lugares. Clique esquerdo no
-    // vazio não faz nada de propósito — mover é o botão direito.
+    // vazio não faz nada de propósito — mover é o botão direito. Mas agora DIZ
+    // que não fez nada: silêncio aqui é indistinguível de clique não registrado.
     const target = containsPoint(MAP.deposit, click.x, click.y)
       ? ({ place: MAP.deposit, intent: "mine" } as const)
       : containsPoint(MAP.refinery, click.x, click.y)
         ? ({ place: MAP.refinery, intent: "sell" } as const)
         : undefined;
-    if (!target) return;
+    if (!target) {
+      showEvent(eventLine, emptyClickLine());
+      return;
+    }
 
     const [px, py] = centerOf(target.place);
+    const distancePx = Math.hypot(px - manager.x, py - manager.y);
     managerField = buildFlowField({ kind: "point", x: px, y: py });
+    currentDestinationLabel = target.place.label;
     manager = orderManager(manager, {
       targetX: px,
       targetY: py,
       intent: target.intent,
       arrivalRadius: MAP.reachRadius,
     });
+
+    // Linha de ORDEM, não de resultado. O resultado sai da comparação do World
+    // depois do tick, em drainActions — nunca daqui. O que esta linha diz é só o
+    // que o app fez com o clique, e a redação de actionOrderLine é escolhida pra
+    // isso nunca passar por resultado.
+    //
+    // `distancePx <= MAP.reachRadius` é literalmente o teste de chegada de
+    // stepManager (`remaining <= order.arrivalRadius`, e arrivalRadius é o
+    // reachRadius aqui): a linha diz "em alcance" exatamente quando o gerente vai
+    // disparar no próximo tick sem andar.
+    showEvent(
+      eventLine,
+      actionOrderLine({
+        placeLabel: target.place.label,
+        distancePx,
+        inReach: distancePx <= MAP.reachRadius,
+        replacedOrder,
+      }),
+    );
+  }
+
+  function handleHover(point: WorldPoint | undefined): void {
+    const overDeposit = point !== undefined && containsPoint(MAP.deposit, point.x, point.y);
+    const overRefinery = point !== undefined && containsPoint(MAP.refinery, point.x, point.y);
+    setPlaceHovered(depositView, overDeposit);
+    setPlaceHovered(refineryView, overRefinery);
+    // Cursor junto do destaque: é o sinal de "clicável" que o jogador já conhece
+    // de qualquer outro programa, e sai de graça.
+    app.canvas.style.cursor = overDeposit || overRefinery ? "pointer" : "default";
   }
 
   // Sem guardar o handle: como o cameraInput acima, isto fica ligado pelo tempo de
   // vida do processo. O jogo não tem caminho de teardown hoje.
-  attachWorldInput(app.canvas, handleClick, cameraInput.getState, () => ({
+  attachWorldInput(app.canvas, handleClick, handleHover, cameraInput.getState, () => ({
     width: app.screen.width,
     height: app.screen.height,
   }));
@@ -281,7 +368,7 @@ export async function startGame(root: HTMLElement): Promise<Application> {
       // desligada — o pool continua existindo e sendo atualizado, então isto não
       // é um jeito disfarçado de medir performance sem eles.
       npcPoolView.container.visible = !npcPoolView.container.visible;
-      console.log(`NPCs decorativos: ${npcPoolView.container.visible ? "on" : "off"}`);
+      showEvent(eventLine, npcToggleLine(npcPoolView.container.visible));
     }
   });
 
@@ -294,11 +381,29 @@ export async function startGame(root: HTMLElement): Promise<Application> {
 
     const updateStart = performance.now();
     const tickCountBefore = frameState.world.tickCount;
-    // Fila vazia: a F1-E2 é só sim/, sem nada na tela e sem input ligado. O
-    // clique que produz MINE/SELL entra na F1-E3 — a fronteira de D-016 já
-    // está aqui esperando por ele.
+    // Amostra ANTES do tick. É metade da medida da linha de evento: o que
+    // aconteceu de fato é este recorte comparado com o de depois. Ver eventLog.ts.
+    const economyBefore = sampleEconomy(frameState.world);
+    // Fila vazia no argumento porque quem enfileira é o gerente, mais abaixo, e o
+    // que ele enfileirou nos frames anteriores já está em frameState.pendingCommands
+    // — updateFrame concatena os dois (D-016).
     const result = updateFrame(frameState, frameMs, []);
     frameState = result.state;
+
+    // Fecha a conta das ações pendentes ANTES de o gerente poder enfileirar
+    // outra neste mesmo frame. A ordem não é estilo: drenar depois mediria a ação
+    // nova contra um tick que ainda não rodou, e ela sairia como "nada aconteceu".
+    const drained = drainActions(
+      actionQueue,
+      result.ticksRan,
+      economyBefore,
+      sampleEconomy(frameState.world),
+      MINING.carryCapacityKg,
+    );
+    actionQueue = drained.queue;
+    for (const line of drained.lines) {
+      showEvent(eventLine, line);
+    }
 
     // NPC é decorativo: não mora em World, não passa por tick(). Mas o
     // movimento ainda é cadenciado pelo mesmo tick fixo do sim (Regra 3 —
@@ -323,14 +428,28 @@ export async function startGame(root: HTMLElement): Promise<Application> {
     // custo é o comando esperar o próximo tick — no máximo 100ms, e a fila é
     // exatamente o mecanismo que a F1-E2 construiu pra isso.
     for (let i = 0; i < result.ticksRan; i++) {
+      const hadOrder = manager.order !== undefined;
       const step = stepManager(manager, managerField, MAP.managerSpeedPerTick);
       manager = step.manager;
-      const command = commandFor(step.fired);
-      if (command) {
+
+      // stepManager só limpa a ordem ao CHEGAR — trocar de ordem é coisa do
+      // handleClick, que não passa por aqui. Então "tinha ordem e agora não tem"
+      // é chegada, e é o único jeito de saber disso sem duplicar a geometria.
+      if (hadOrder && manager.order === undefined) {
+        // tickCountBefore + i + 1: o tick que ESTE passo do gerente acompanha. O
+        // gerente anda um passo por tick que rodou, e o laço já rodou i deles.
+        showEvent(eventLine, arrivalLine(currentDestinationLabel, tickCountBefore + i + 1));
+      }
+
+      if (isActionIntent(step.fired)) {
         frameState = {
           ...frameState,
-          pendingCommands: frameState.pendingCommands.concat([command]),
+          pendingCommands: frameState.pendingCommands.concat([commandFor(step.fired)]),
         };
+        actionQueue = queueAction(actionQueue, {
+          kind: step.fired,
+          placeLabel: currentDestinationLabel,
+        });
       }
     }
 
@@ -344,6 +463,7 @@ export async function startGame(root: HTMLElement): Promise<Application> {
       fiscalMonthTicks: MINING.fiscalMonthTicks,
     });
     syncNpcPoolView(npcPoolView, npcPool);
+    syncClickMarker(clickMarker, nowMs);
 
     applyToContainer(camera, worldContainer, app.screen.width, app.screen.height);
     const updateMs = performance.now() - updateStart;

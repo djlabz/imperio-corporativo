@@ -10,19 +10,23 @@ function snapshot(overrides: Partial<ReadoutSnapshot> = {}): ReadoutSnapshot {
     depositKg: 4_988,
     tickCount: 900,
     fiscalMonthTicks: 1_800,
+    employeeCount: 0,
+    wagePerEmployee: centavos(2_000),
     ...overrides,
   };
 }
 
 describe("formatReadoutText()", () => {
-  it("mostra as cinco linhas que a etapa pede", () => {
+  it("mostra as sete linhas que a etapa pede (F1-E4 somou funcionários e próxima virada)", () => {
     const lines = formatReadoutText(snapshot()).split("\n");
-    expect(lines).toHaveLength(5);
+    expect(lines).toHaveLength(7);
     expect(lines[0]).toContain("Dinheiro");
     expect(lines[1]).toContain("Carga");
     expect(lines[2]).toContain("Depósito");
     expect(lines[3]).toContain("Mês fiscal");
-    expect(lines[4]).toContain("Tick");
+    expect(lines[4]).toContain("Funcionários");
+    expect(lines[5]).toContain("Próxima virada");
+    expect(lines[6]).toContain("Tick");
   });
 
   it("formata dinheiro pelo fmt() do money.ts, não por conta própria", () => {
@@ -61,6 +65,32 @@ describe("formatReadoutText()", () => {
     expect(text).toContain("Mês fiscal: 2");
     expect(text).toMatch(/\(50% — tick 900\/1800\)/);
     expect(text).not.toContain("150%");
+  });
+
+  it("mostra a folha TOTAL (funcionários × salário), não o salário de um só", () => {
+    const text = formatReadoutText(
+      snapshot({ employeeCount: 4, wagePerEmployee: centavos(2_000) }),
+    );
+    // 4 × R$20,00 = R$80,00. Ancorado: R$20,00 sozinho também apareceria como
+    // substring de qualquer formatação errada que esquecesse a multiplicação.
+    expect(text).toMatch(/Funcionários: 4 {2}\(folha: R\$ 80,00 \/ mês\)/);
+  });
+
+  it("zero funcionários mostra folha zero, não a ausência da linha", () => {
+    const text = formatReadoutText(snapshot({ employeeCount: 0 }));
+    expect(text).toContain("Funcionários: 0");
+    expect(text).toContain("folha: R$ 0,00 / mês");
+  });
+
+  it("a próxima virada é a PRÓXIMA fronteira, não a que já passou", () => {
+    // tick 900 = metade do mês 1 (fiscalMonthTicks=1800) → próxima virada é 1800.
+    expect(formatReadoutText(snapshot({ tickCount: 900 }))).toContain("Próxima virada: tick 1800");
+
+    // EM CIMA da fronteira (tick 1800 = início do mês 2): a próxima virada é
+    // 3600, não 1800 de novo — este é o caso que uma divisão sem +1 erraria.
+    expect(formatReadoutText(snapshot({ tickCount: 1_800 }))).toContain(
+      "Próxima virada: tick 3600",
+    );
   });
 });
 

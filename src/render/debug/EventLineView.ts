@@ -16,10 +16,12 @@ export function createEventLine(): Text {
     text: "—",
     style: { fill: 0x6fd8e8, fontFamily: "monospace", fontSize: 16 },
   });
-  // Abaixo do ReadoutView, que começa em y=200 e ocupa 5 linhas de 20px.
-  // Mesmo cuidado (e mesmo motivo) do deslocamento que o readout já carrega:
-  // nada em código sabe onde o outro Text está.
-  text.position.set(12, 312);
+  // Abaixo do ReadoutView, que começa em y=200 e ocupa 7 linhas de 20px desde a
+  // F1-E4 (entraram funcionários e próxima virada). Mesmo cuidado — e mesmo
+  // motivo — do deslocamento que o readout já carrega: nada em código sabe
+  // onde o outro Text está, então este número tem que acompanhar à mão sempre
+  // que o readout ganhar ou perder uma linha.
+  text.position.set(12, 352);
   return text;
 }
 

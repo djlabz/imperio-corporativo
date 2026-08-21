@@ -1,6 +1,6 @@
 import { Text } from "pixi.js";
-import { fiscalMonth } from "../../sim/core/time";
-import { fmt } from "../../sim/economy/money";
+import { fiscalMonth, nextFiscalMonthTick } from "../../sim/core/time";
+import { fmt, mul, type Money } from "../../sim/economy/money";
 import type { World } from "../../sim/core/World";
 
 /**
@@ -15,6 +15,9 @@ export interface ReadoutSnapshot {
   readonly depositKg: number;
   readonly tickCount: number;
   readonly fiscalMonthTicks: number;
+  readonly employeeCount: number;
+  /** Salário de UM funcionário — a linha multiplica pra mostrar a folha total. */
+  readonly wagePerEmployee: Money;
 }
 
 /** Formatação pura, sem Pixi — testável sem precisar de um Text real. */
@@ -23,12 +26,16 @@ export function formatReadoutText(snapshot: ReadoutSnapshot): string {
   const intoMonth = snapshot.tickCount % snapshot.fiscalMonthTicks;
   const monthProgress = ((intoMonth / snapshot.fiscalMonthTicks) * 100).toFixed(0);
   const full = snapshot.stockKg >= snapshot.carryCapacityKg ? "  [CHEIO]" : "";
+  const payroll = mul(snapshot.wagePerEmployee, snapshot.employeeCount);
+  const nextTurnover = nextFiscalMonthTick(snapshot.tickCount, snapshot.fiscalMonthTicks);
 
   return [
     `Dinheiro: ${fmt(snapshot.money)}`,
     `Carga: ${snapshot.stockKg} / ${snapshot.carryCapacityKg} kg${full}`,
     `Depósito: ${snapshot.depositKg} kg restantes`,
     `Mês fiscal: ${month}  (${monthProgress}% — tick ${intoMonth}/${snapshot.fiscalMonthTicks})`,
+    `Funcionários: ${snapshot.employeeCount}  (folha: ${fmt(payroll)} / mês)`,
+    `Próxima virada: tick ${nextTurnover}`,
     `Tick: ${snapshot.tickCount}`,
   ].join("\n");
 }

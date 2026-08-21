@@ -1,4 +1,5 @@
 import type { World } from "../../sim/core/World";
+import type { Money } from "../../sim/economy/money";
 import { fmt, sub } from "../../sim/economy/money";
 
 /**
@@ -21,6 +22,7 @@ export interface EconomySample {
   readonly money: World["money"];
   readonly stockKg: number;
   readonly depositKg: number;
+  readonly employeeCount: number;
   readonly tickCount: number;
 }
 
@@ -29,21 +31,28 @@ export function sampleEconomy(world: World): EconomySample {
     money: world.money,
     stockKg: world.stockKg,
     depositKg: world.depositKg,
+    employeeCount: world.employeeCount,
     tickCount: world.tickCount,
   };
 }
 
-/** As duas intenções que viram comando. Mesmas strings de ManagerIntent, de propósito. */
-export type ActionKind = "mine" | "sell";
-
-export interface ActionRecord {
-  readonly kind: ActionKind;
-  /** Rótulo do lugar, como está escrito no mapa: "DEPÓSITO", "REFINARIA". */
-  readonly placeLabel: string;
-}
+/**
+ * As ações que viram comando. "mine"/"sell" vêm do gerente (mesmas strings de
+ * ManagerIntent, de propósito) e carregam o lugar clicado; "hire" vem da tecla H
+ * e não tem lugar — HIRE não tem posição nenhuma (D-021).
+ */
+export type ActionRecord =
+  { readonly kind: "mine" | "sell"; readonly placeLabel: string } | { readonly kind: "hire" };
 
 const LEFT = "clique esquerdo";
 const RIGHT = "clique direito";
+const KEY_H = "tecla H";
+
+/** Contexto de balanceamento que os outcomes precisam pra formatar a linha. */
+export interface OutcomeContext {
+  readonly carryCapacityKg: number;
+  readonly hireCost: Money;
+}
 
 function signed(delta: number): string {
   return delta >= 0 ? `+${delta}` : String(delta);
@@ -160,6 +169,30 @@ function sellOutcome(before: EconomySample, after: EconomySample): string {
 }
 
 /**
+ * Igual em espírito a mineOutcome/sellOutcome: mede o delta de employeeCount e
+ * dinheiro, nunca assume que a tecla funcionou. `MINING.hireCost` não entra
+ * aqui como número cravado — vem de `context.hireCost`, o mesmo balanceamento
+ * que `hire()` usa de verdade, pra mensagem e medida não poderem discordar.
+ */
+function hireOutcome(before: EconomySample, after: EconomySample, hireCost: Money): string {
+  const employeeDelta = after.employeeCount - before.employeeCount;
+  // Comparação, não aritmética monetária: -hireCost só inverte o sinal de um
+  // valor que já existe, não deriva um novo — a Regra 2 barra operador cru
+  // sobre Money quando ele PRODUZ um valor (que poderia precisar arredondar).
+  const moneyDelta = sub(after.money, before.money);
+
+  if (employeeDelta === 1 && moneyDelta === -hireCost) {
+    return `contratou funcionário nº ${after.employeeCount}`;
+  }
+
+  if (employeeDelta === 0 && moneyDelta === 0) {
+    return `sem dinheiro para contratar (precisa de ${fmt(hireCost)})`;
+  }
+
+  return `MEDIDA INESPERADA: funcionários ${signed(employeeDelta)}, dinheiro ${fmt(moneyDelta)}`;
+}
+
+/**
  * Linha (ou linhas) de uma leva de comandos que acabou de rodar no tick.
  *
  * Com mais de um comando na mesma leva, o delta medido é AGREGADO e não dá pra
@@ -172,21 +205,29 @@ export function describeActions(
   actions: readonly ActionRecord[],
   before: EconomySample,
   after: EconomySample,
-  carryCapacityKg: number,
+  context: OutcomeContext,
 ): readonly string[] {
   if (actions.length === 0) return [];
   const at = `(tick ${after.tickCount})`;
 
   if (actions.length === 1) {
     const action = actions[0];
+    if (action.kind === "hire") {
+      return [`${KEY_H} → ${hireOutcome(before, after, context.hireCost)}  ${at}`];
+    }
     const outcome =
       action.kind === "mine"
-        ? mineOutcome(before, after, carryCapacityKg)
+        ? mineOutcome(before, after, context.carryCapacityKg)
         : sellOutcome(before, after);
     return [`${LEFT} → ${action.placeLabel} → ${outcome}  ${at}`];
   }
 
-  const labels = actions.map((action) => action.placeLabel).join(", ");
+  // Leva mista (ex.: um clique e uma tecla H no mesmo tick): "CONTRATAR" no
+  // lugar de um placeLabel que hire não tem. Ainda cai no ramo AGREGADO — a
+  // atribuição por comando já não dava pra fazer antes disto existir.
+  const labels = actions
+    .map((action) => (action.kind === "hire" ? "CONTRATAR" : action.placeLabel))
+    .join(", ");
   const stockDelta = signed(after.stockKg - before.stockKg);
   const moneyDelta = fmt(sub(after.money, before.money));
   return [
@@ -230,13 +271,13 @@ export function drainActions(
   ticksRan: number,
   before: EconomySample,
   after: EconomySample,
-  carryCapacityKg: number,
+  context: OutcomeContext,
 ): DrainResult {
   if (ticksRan === 0 || queue.actions.length === 0) {
     return { queue, lines: [] };
   }
   return {
     queue: EMPTY_ACTION_QUEUE,
-    lines: describeActions(queue.actions, before, after, carryCapacityKg),
+    lines: describeActions(queue.actions, before, after, context),
   };
 }

@@ -369,6 +369,16 @@ export async function startGame(root: HTMLElement): Promise<Application> {
       // é um jeito disfarçado de medir performance sem eles.
       npcPoolView.container.visible = !npcPoolView.container.visible;
       showEvent(eventLine, npcToggleLine(npcPoolView.container.visible));
+    } else if (event.key === "h") {
+      // HIRE não tem posição (D-021): sem gerente, sem viagem, sem alcance —
+      // entra na fila igual a um golpe já em alcance, e resolve no próximo
+      // tick (até 100ms). A linha de resultado sai de drainActions, medindo,
+      // igual a MINE/SELL — nunca daqui.
+      frameState = {
+        ...frameState,
+        pendingCommands: frameState.pendingCommands.concat([{ kind: "HIRE" }]),
+      };
+      actionQueue = queueAction(actionQueue, { kind: "hire" });
     }
   });
 
@@ -398,7 +408,7 @@ export async function startGame(root: HTMLElement): Promise<Application> {
       result.ticksRan,
       economyBefore,
       sampleEconomy(frameState.world),
-      MINING.carryCapacityKg,
+      { carryCapacityKg: MINING.carryCapacityKg, hireCost: MINING.hireCost },
     );
     actionQueue = drained.queue;
     for (const line of drained.lines) {
@@ -461,6 +471,8 @@ export async function startGame(root: HTMLElement): Promise<Application> {
       depositKg: frameState.world.depositKg,
       tickCount: frameState.world.tickCount,
       fiscalMonthTicks: MINING.fiscalMonthTicks,
+      employeeCount: frameState.world.employeeCount,
+      wagePerEmployee: MINING.wagePerEmployee,
     });
     syncNpcPoolView(npcPoolView, npcPool);
     syncClickMarker(clickMarker, nowMs);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { centavos } from "../../sim/economy/money";
 import { MINING } from "../../sim/data/balance";
+import { hire } from "../../sim/economy/employees";
 import { mine, sell } from "../../sim/economy/mining";
 import { createWorld } from "../../sim/core/World";
 import { tick } from "../../sim/core/tick";
@@ -17,6 +18,7 @@ import {
   queueAction,
   sampleEconomy,
   type EconomySample,
+  type OutcomeContext,
 } from "./eventLog";
 
 function sample(partial: Partial<EconomySample> = {}): EconomySample {
@@ -24,12 +26,14 @@ function sample(partial: Partial<EconomySample> = {}): EconomySample {
     money: centavos(0),
     stockKg: 0,
     depositKg: 5_000,
+    employeeCount: 0,
     tickCount: 1,
     ...partial,
   };
 }
 
 const CAP = MINING.carryCapacityKg;
+const CTX: OutcomeContext = { carryCapacityKg: CAP, hireCost: MINING.hireCost };
 
 describe("linhas imediatas", () => {
   it("clique direito diz para onde", () => {
@@ -86,7 +90,7 @@ describe("describeActions() — minerar", () => {
     const before = sample({ stockKg: 0, depositKg: 5_000 });
     const after = sample({ stockKg: 2, depositKg: 4_998, tickCount: 2 });
 
-    expect(describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, after, CAP)).toEqual(
+    expect(describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, after, CTX)).toEqual(
       ["clique esquerdo → DEPÓSITO → minerou 2 kg  (tick 2)"],
     );
   });
@@ -94,14 +98,14 @@ describe("describeActions() — minerar", () => {
   it("carga cheia", () => {
     const before = sample({ stockKg: CAP });
     expect(
-      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, before, CAP)[0],
+      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, before, CTX)[0],
     ).toContain("carga cheia, nada extraído");
   });
 
   it("depósito vazio", () => {
     const before = sample({ stockKg: 10, depositKg: 0 });
     expect(
-      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, before, CAP)[0],
+      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, before, CTX)[0],
     ).toContain("depósito vazio");
   });
 
@@ -111,7 +115,7 @@ describe("describeActions() — minerar", () => {
     // ("minerou 2 kg") esconderia exatamente isto.
     const before = sample({ stockKg: 10, depositKg: 5_000 });
     expect(
-      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, before, CAP)[0],
+      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, before, CTX)[0],
     ).toContain("nada extraído, e nem a carga estava cheia nem o depósito vazio");
   });
 
@@ -119,7 +123,7 @@ describe("describeActions() — minerar", () => {
     const before = sample({ stockKg: 0, depositKg: 5_000 });
     const after = sample({ stockKg: 2, depositKg: 5_000, tickCount: 2 });
     expect(
-      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, after, CAP)[0],
+      describeActions([{ kind: "mine", placeLabel: "DEPÓSITO" }], before, after, CTX)[0],
     ).toContain("MEDIDA INESPERADA: carga +2 kg, depósito +0 kg");
   });
 });
@@ -130,21 +134,21 @@ describe("describeActions() — vender", () => {
     const after = sample({ stockKg: 0, money: centavos(2_250), tickCount: 2 });
 
     expect(
-      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, after, CAP),
+      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, after, CTX),
     ).toEqual(["clique esquerdo → REFINARIA → vendeu 50 kg por R$ 22,50  (tick 2)"]);
   });
 
   it("carga vazia", () => {
     const before = sample({ stockKg: 0 });
     expect(
-      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, before, CAP)[0],
+      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, before, CTX)[0],
     ).toContain("carga vazia, nada a vender");
   });
 
   it("carga cheia e nada vendido é reportado, não silenciado", () => {
     const before = sample({ stockKg: 30 });
     expect(
-      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, before, CAP)[0],
+      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, before, CTX)[0],
     ).toContain("nada vendido, e a carga não estava vazia");
   });
 
@@ -152,8 +156,40 @@ describe("describeActions() — vender", () => {
     const before = sample({ stockKg: 50 });
     const after = sample({ stockKg: 0, tickCount: 2 });
     expect(
-      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, after, CAP)[0],
+      describeActions([{ kind: "sell", placeLabel: "REFINARIA" }], before, after, CTX)[0],
     ).toContain("MEDIDA INESPERADA");
+  });
+});
+
+describe("describeActions() — contratar", () => {
+  it("relata o funcionário MEDIDO, com número de ordem", () => {
+    const before = sample({ money: centavos(6_000), employeeCount: 2 });
+    const after = sample({ money: centavos(0), employeeCount: 3, tickCount: 2 });
+
+    expect(describeActions([{ kind: "hire" }], before, after, CTX)).toEqual([
+      "tecla H → contratou funcionário nº 3  (tick 2)",
+    ]);
+  });
+
+  it("sem dinheiro suficiente, diz o preço — não silencia a tecla", () => {
+    const before = sample({ money: centavos(500), employeeCount: 0 });
+    expect(describeActions([{ kind: "hire" }], before, before, CTX)[0]).toBe(
+      `tecla H → sem dinheiro para contratar (precisa de ${"R$ 60,00"})  (tick 1)`,
+    );
+  });
+
+  it("dinheiro saindo sem funcionário entrando é MEDIDA INESPERADA", () => {
+    const before = sample({ money: centavos(6_000), employeeCount: 0 });
+    const after = sample({ money: centavos(0), employeeCount: 0, tickCount: 2 });
+    expect(describeActions([{ kind: "hire" }], before, after, CTX)[0]).toContain(
+      "MEDIDA INESPERADA: funcionários +0",
+    );
+  });
+
+  it("a linha de 'sem dinheiro' não pode ser confundida com sucesso", () => {
+    const before = sample({ money: centavos(0), employeeCount: 0 });
+    const line = describeActions([{ kind: "hire" }], before, before, CTX)[0];
+    expect(line).not.toContain("contratou");
   });
 });
 
@@ -168,12 +204,27 @@ describe("describeActions() — leva com mais de um comando", () => {
       ],
       before,
       after,
-      CAP,
+      CTX,
     );
 
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("clique esquerdo ×2 → DEPÓSITO, DEPÓSITO");
     expect(lines[0]).toContain("carga +4 kg");
+    expect(lines[0]).toContain("delta AGREGADO");
+  });
+
+  it("leva mista com HIRE usa 'CONTRATAR' no lugar do placeLabel que hire não tem", () => {
+    const before = sample({ stockKg: 0, depositKg: 5_000, money: centavos(6_000) });
+    const after = sample({ stockKg: 10, depositKg: 4_990, money: centavos(0), tickCount: 2 });
+    const lines = describeActions(
+      [{ kind: "mine", placeLabel: "DEPÓSITO" }, { kind: "hire" }],
+      before,
+      after,
+      CTX,
+    );
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("DEPÓSITO, CONTRATAR");
     expect(lines[0]).toContain("delta AGREGADO");
   });
 });
@@ -183,7 +234,7 @@ describe("drainActions()", () => {
     // Com TICK_MS = 100 e tela a 60fps, a maioria dos frames cai aqui. Drenar
     // aqui inventaria um "nada aconteceu" pra um comando que nem rodou.
     const queue = queueAction(EMPTY_ACTION_QUEUE, { kind: "mine", placeLabel: "DEPÓSITO" });
-    const result = drainActions(queue, 0, sample(), sample(), CAP);
+    const result = drainActions(queue, 0, sample(), sample(), CTX);
 
     expect(result.lines).toEqual([]);
     expect(result.queue).toBe(queue);
@@ -193,14 +244,14 @@ describe("drainActions()", () => {
     const queue = queueAction(EMPTY_ACTION_QUEUE, { kind: "mine", placeLabel: "DEPÓSITO" });
     const before = sample({ stockKg: 0, depositKg: 5_000 });
     const after = sample({ stockKg: 2, depositKg: 4_998, tickCount: 2 });
-    const result = drainActions(queue, 1, before, after, CAP);
+    const result = drainActions(queue, 1, before, after, CTX);
 
     expect(result.lines).toEqual(["clique esquerdo → DEPÓSITO → minerou 2 kg  (tick 2)"]);
     expect(result.queue.actions).toEqual([]);
   });
 
   it("fila vazia com tick não produz linha", () => {
-    expect(drainActions(EMPTY_ACTION_QUEUE, 1, sample(), sample(), CAP).lines).toEqual([]);
+    expect(drainActions(EMPTY_ACTION_QUEUE, 1, sample(), sample(), CTX).lines).toEqual([]);
   });
 });
 
@@ -217,7 +268,7 @@ describe("a medida fecha com o sim/ de verdade", () => {
         [{ kind: "mine", placeLabel: "DEPÓSITO" }],
         sampleEconomy(before),
         sampleEconomy(after),
-        MINING.carryCapacityKg,
+        CTX,
       )[0],
     ).toBe(`clique esquerdo → DEPÓSITO → minerou ${MINING.kgPerStrike} kg  (tick 1)`);
   });
@@ -234,7 +285,7 @@ describe("a medida fecha com o sim/ de verdade", () => {
         [{ kind: "sell", placeLabel: "REFINARIA" }],
         sampleEconomy(before),
         sampleEconomy(after),
-        MINING.carryCapacityKg,
+        CTX,
       )[0],
     ).toContain(`vendeu ${expectedKg} kg por R$ `);
   });
@@ -249,8 +300,29 @@ describe("a medida fecha com o sim/ de verdade", () => {
         [{ kind: "mine", placeLabel: "DEPÓSITO" }],
         sampleEconomy(world),
         sampleEconomy(after),
-        MINING.carryCapacityKg,
+        CTX,
       )[0],
     ).toContain("carga cheia, nada extraído");
+  });
+
+  it("HIRE de verdade produz 'contratou funcionário nº 1'", () => {
+    const before = { ...createWorld("teste"), money: MINING.hireCost };
+    const after = tick(before, [{ kind: "HIRE" }]);
+
+    expect(
+      describeActions([{ kind: "hire" }], sampleEconomy(before), sampleEconomy(after), CTX)[0],
+    ).toBe("tecla H → contratou funcionário nº 1  (tick 1)");
+  });
+
+  it("HIRE de verdade sem dinheiro produz a mensagem de preço, com o preço real", () => {
+    const before = createWorld("teste"); // money = 0
+    const after = tick(before, [{ kind: "HIRE" }]);
+
+    expect(
+      describeActions([{ kind: "hire" }], sampleEconomy(before), sampleEconomy(after), CTX)[0],
+    ).toContain(`precisa de R$ 60,00`);
+    // hire() puro concorda com o que o log mostrou — não são dois números que
+    // podem discordar por acidente.
+    expect(hire(before, MINING).employeeCount).toBe(0);
   });
 });

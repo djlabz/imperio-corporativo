@@ -60,8 +60,14 @@ export const VERY_LONG_FRAME_THRESHOLD_MS = 33;
 
 /**
  * SOB VSYNC OS DOIS CONTADORES SÃO IGUAIS, E ISSO É CORRETO — não é bug, e já
- * levantou suspeita uma vez. Medido na F1-E3, com histograma temporário sobre
- * 1518 frames de sessão real:
+ * levantou suspeita uma vez. Medido na F1-E3, com histograma temporário no call
+ * site de recordLongFrame.
+ *
+ * CONDIÇÕES DA COLETA, porque a proporção abaixo engana se lida fora delas:
+ * 1518 frames num browser dirigido por automação (Playwright via CDP), servidos
+ * pelo dev server do Vite, dentro do WSL2, enquanto um script disparava 60
+ * cliques sintéticos a cada ~300ms — cada um recomputando o flow field e
+ * reordenando o gerente. Nenhuma captura de tela durante a janela medida.
  *
  *   faixa      frames
  *   00-05           1
@@ -73,6 +79,17 @@ export const VERY_LONG_FRAME_THRESHOLD_MS = 33;
  *   50+             3
  *
  *   >20ms: 332    >33ms: 332    na faixa 20-33ms: ZERO
+ *
+ * ATENÇÃO AO LER ISTO COMO DESEMPENHO: a proporção de frames longos nesta tabela
+ * (332 de 1518 = 21,9%) NÃO é representativa de sessão normal. O overlay em
+ * sessão real, sem automação, deu 703 de 99.885 = 0,70% — duas ordens de
+ * magnitude abaixo. Por que os dois diferem não foi medido, e não está afirmado
+ * aqui (D-018).
+ *
+ * O que esta tabela demonstra é a AUSÊNCIA da faixa 20–33ms, não a frequência de
+ * frame longo. E a conclusão sobre os contadores não depende da proporção:
+ * contaminação, de qualquer origem, ADICIONARIA frames nas faixas do meio, e elas
+ * estão zeradas.
  *
  * O motivo é o vsync: a 60Hz o compositor entrega frame em múltiplos de ~16,7ms,
  * então um frame ou cabe em uma janela de refresh (~16,7ms) ou perde e vai pra

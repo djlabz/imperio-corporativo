@@ -16,6 +16,12 @@ export interface World {
   readonly depositKg: number;
   /** Minério extraído e ainda não vendido. */
   readonly stockKg: number;
+  /**
+   * Quantos funcionários trabalham pro jogador. Sem posição, sem identidade —
+   * é contagem, não lista (D-017/D-021: o funcionário faz o laço inteiro sozinho,
+   * mas onde ele está é decorativo do renderer, o `sim/` só sabe "quantos").
+   */
+  readonly employeeCount: number;
 }
 
 /**
@@ -28,8 +34,9 @@ export interface World {
  * permitida: platform/ conhece sim/, nunca o contrário.
  *
  * v1 → v2 (F1-E2): entraram depositKg e stockKg.
+ * v2 → v3 (F1-E4): entrou employeeCount.
  */
-export const WORLD_VERSION = 2;
+export const WORLD_VERSION = 3;
 
 /** Cria um World novo a partir de uma seed. Não avança nenhum tick. */
 export function createWorld(seed: string): World {
@@ -42,5 +49,6 @@ export function createWorld(seed: string): World {
     money: centavos(0),
     depositKg: MINING.initialDepositKg,
     stockKg: 0,
+    employeeCount: 0,
   };
 }

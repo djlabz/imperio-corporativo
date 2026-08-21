@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MINING } from "../data/balance";
-import { fiscalMonth } from "./time";
+import { fiscalMonth, nextFiscalMonthTick } from "./time";
 
 const TICKS = MINING.fiscalMonthTicks;
 
@@ -24,5 +24,27 @@ describe("fiscalMonth()", () => {
 
   it("é derivação pura: mesmo tick, mesmo mês, sem estado no meio", () => {
     expect(fiscalMonth(4_242, TICKS)).toBe(fiscalMonth(4_242, TICKS));
+  });
+});
+
+describe("nextFiscalMonthTick()", () => {
+  it("do tick 0, a próxima virada é o fim do mês 1", () => {
+    expect(nextFiscalMonthTick(0, TICKS)).toBe(TICKS);
+  });
+
+  it("um tick antes da fronteira, a próxima virada ainda é a mesma fronteira", () => {
+    expect(nextFiscalMonthTick(TICKS - 1, TICKS)).toBe(TICKS);
+  });
+
+  it("EM CIMA da fronteira, a próxima virada é a SEGUINTE, não a que já passou", () => {
+    // Este é o ponto que uma divisão sem +1 erraria: no tick em que o mês 2
+    // acabou de começar, "próxima virada" não pode ser o próprio tick atual.
+    expect(nextFiscalMonthTick(TICKS, TICKS)).toBe(TICKS * 2);
+  });
+
+  it("segue avançando nas fronteiras seguintes", () => {
+    expect(nextFiscalMonthTick(TICKS + 1, TICKS)).toBe(TICKS * 2);
+    expect(nextFiscalMonthTick(TICKS * 2 - 1, TICKS)).toBe(TICKS * 2);
+    expect(nextFiscalMonthTick(TICKS * 12, TICKS)).toBe(TICKS * 13);
   });
 });

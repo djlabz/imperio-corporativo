@@ -22,6 +22,14 @@ export interface MiningBalance {
    * D-017 simplesmente não acontece.
    */
   readonly carryCapacityKg: number;
+  /** Custo à vista de contratar um funcionário (F1-E4). */
+  readonly hireCost: Money;
+  /** Salário de UM funcionário, cobrado por mês fiscal inteiro, não por tick. */
+  readonly wagePerEmployee: Money;
+  /** Quanto cada funcionário extrai — e vende na hora — por ciclo. */
+  readonly employeeKgPerCycle: number;
+  /** Duração do ciclo de produção do funcionário, em ticks. */
+  readonly employeeCycleTicks: number;
 }
 
 // z.int(), não z.number(): a diferença que importa aqui é a FRAÇÃO. Os dois
@@ -35,6 +43,10 @@ const MiningBalanceSchema = z.object({
   initialDepositKg: z.int().nonnegative(),
   pricePerKgCents: z.int().positive(),
   carryCapacityKg: z.int().positive(),
+  hireCostCents: z.int().positive(),
+  wagePerEmployeeCents: z.int().positive(),
+  employeeKgPerCycle: z.int().positive(),
+  employeeCycleTicks: z.int().positive(),
 });
 
 /**
@@ -54,6 +66,10 @@ export function parseMiningBalance(raw: unknown): MiningBalance {
     initialDepositKg: parsed.data.initialDepositKg,
     pricePerKg: centavos(parsed.data.pricePerKgCents),
     carryCapacityKg: parsed.data.carryCapacityKg,
+    hireCost: centavos(parsed.data.hireCostCents),
+    wagePerEmployee: centavos(parsed.data.wagePerEmployeeCents),
+    employeeKgPerCycle: parsed.data.employeeKgPerCycle,
+    employeeCycleTicks: parsed.data.employeeCycleTicks,
   };
 }
 

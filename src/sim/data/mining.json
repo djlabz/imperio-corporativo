@@ -3,5 +3,9 @@
   "kgPerStrike": 10,
   "initialDepositKg": 5000,
   "pricePerKgCents": 45,
-  "carryCapacityKg": 50
+  "carryCapacityKg": 50,
+  "hireCostCents": 6000,
+  "wagePerEmployeeCents": 2000,
+  "employeeKgPerCycle": 1,
+  "employeeCycleTicks": 15
 }

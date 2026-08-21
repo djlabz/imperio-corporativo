@@ -8,12 +8,18 @@ import { mine, sell } from "./mining";
 // teste seja verificável de cabeça. Não usa o MINING de produção de propósito:
 // teste que depende do JSON de balanceamento quebra a cada ajuste de ritmo, e
 // ajustar ritmo é a coisa que mais vai acontecer nesta fase.
+// hireCost/wagePerEmployee/employee* não são exercitados por mine()/sell() —
+// presentes só pra satisfazer o tipo MiningBalance. Ver employees.test.ts.
 const BALANCE: MiningBalance = {
   fiscalMonthTicks: 1000,
   kgPerStrike: 10,
   initialDepositKg: 100,
   pricePerKg: centavos(50),
   carryCapacityKg: 50,
+  hireCost: centavos(500),
+  wagePerEmployee: centavos(20),
+  employeeKgPerCycle: 1,
+  employeeCycleTicks: 100,
 };
 
 function world(overrides: Partial<World> = {}): World {

@@ -5,4 +5,5 @@
  *
  * A fila NÃO mora no World. Ela é argumento de tick(); ver D-016 pro porquê.
  */
-export type Command = { readonly kind: "MINE" } | { readonly kind: "SELL" };
+export type Command =
+  { readonly kind: "MINE" } | { readonly kind: "SELL" } | { readonly kind: "HIRE" };

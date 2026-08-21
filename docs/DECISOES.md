@@ -852,6 +852,51 @@ isolado, e um log de sessão compartilhada não é evidência de uma corrida só
 
 ---
 
+## D-021 · O funcionário faz o laço inteiro, e por que carregador não bastava
+
+**21/08/2026 · F1-E4**
+
+O funcionário contratado (F1-E4) extrai, carrega e vende sozinho — mais devagar
+que o jogador, mas o ciclo completo. Não é carregador (que só andaria com o que
+o jogador minerou) nem mineiro parcial (que só minerasse, deixando a venda pro
+jogador).
+
+**Medido na F1-E3, e é a medida que decide isto:** dos ~41s de um ciclo completo
+depois do ajuste de `kgPerStrike` pra 10, a caminhada (ida + volta entre depósito
+e refinaria, ~1631px fora dos dois alcances, a 140px/s) é ~32s — **78% do
+ciclo**. Minerar e vender juntos são os ~22% restantes.
+
+Um carregador que só fizesse a viagem deixaria o jogador clicando pra sempre: os
+outros 22% (o golpe de picareta, a venda) continuariam manuais, e a "ajuda" seria
+só não andar — nenhum alívio de clique. Um mineiro que só minerasse (sem viajar
+nem vender) não tocaria nos 78% que de fato pesam: o jogador ainda carregaria o
+minério dele até a refinaria, viagem que não diminui um passo.
+
+**Só o funcionário que fecha o laço inteiro converte trabalho ativo em renda
+passiva** — que é a fantasia de dono (virar gerente, não continuar operário) e o
+alívio que D-017 prometeu ("o tempo de caminhada é o atrito que dá sentido à
+automação"; D-017 também cobra que esse atrito pare de importar, e é exatamente
+isto que contratar faz parar de importar).
+
+**Consequência técnica, e é onde D-017 se estende:** no `sim/`, o funcionário
+**não tem posição**. É taxa de produção (`employeeKgPerCycle` a cada
+`employeeCycleTicks`) mais folha (`wagePerEmployee` por mês fiscal) — nada mais.
+`World` ganha só `employeeCount: number`, uma CONTAGEM, não uma lista: não há
+onde nem por que guardar onde cada um está, porque nenhum comportamento depende
+disso. O renderer pode um dia animar bonecos andando por cima — decorativo, como
+os NPCs de hoje — mas o `sim/` continua sem saber que existe posição, exatamente
+como já não sabia pro gerente (D-017).
+
+**Cadência é um marco GLOBAL, não um relógio por funcionário.** Como
+`employeeCount` é contagem e não lista, não há onde guardar "há quanto tempo
+CADA UM foi contratado" sem inventar um array de estado que a etapa pediu
+explicitamente pra evitar. Consequência aceita: um funcionário contratado no meio
+de um ciclo só produz no próximo marco global, junto com todo mundo — não no seu
+próprio aniversário de contratação. Ver `runEmployees()` em
+`sim/economy/employees.ts`.
+
+---
+
 ## Pendências abertas
 
 | # | Item | Volta quando |
@@ -861,8 +906,10 @@ isolado, e um log de sessão compartilhada não é evidência de uma corrida só
 | P-07 | Avaliar o visual companion do `brainstorming` (5 arquivos em `scripts/`, ~60KB, inclui servidor HTTP local em Node de 25KB). Não foi vendorado com a skill (ver `.claude/skills/VENDOR.md`): a regra 1 do D-010 manda ler o `SKILL.md` inteiro antes de instalar, o que é viável porque é curto — 60KB de JS e shell de terceiro não recebe leitura do mesmo nível, e pinar num SHA garante que não muda, não que seja bom. **Condição para entrar:** auditoria do `server.cjs` e dos scripts de shell, pinagem em SHA, e registro do que ele abre e escuta | A Fase 1 chegar nas etapas de UI e a falta de ferramenta visual doer de verdade |
 | P-09 | Alcance do filtro do `rtk` (ver adendo de 19/08/2026). **Medido na F1-E1, e o dado fecha a parte que importava:** os dois relatórios contaminados que a tabela acima registra eram sobre **lint**, e lint não é filtrado. `pnpm lint` sai byte-idêntico nos três caminhos (`rtk`, `rtk proxy`, sem prefixo) nos dois estados: limpo (9 bytes, `sha fe821952`, exit 0) e com 8 diagnósticos reais plantados pelo fixture de `sim-purity` (1458 bytes, `sha 07ec404e`, exit 1). Comparar só o estado limpo não discriminaria nada — vazio contra vazio; foi preciso um estado com saída de verdade. Na forma `npx oxlint` a saída também é equivalente — 8 de 8 diagnósticos intactos; a única diferença é a linha `npm warn` do `.npmrc` mudando de posição (intercalação de stdout/stderr, não resumo). **Consequência:** o filtro não explica os dois relatórios da Fase 0, e o diagnóstico original (`oxlint` não imprime nada quando limpo, indistinguível de "não rodou") continua sendo a explicação. O que resta aberto é estritamente menor: só `tsc` invocado como `npx tsc` foi visto sintetizando saída, e o inventário completo de quais comandos o `rtk` resume não foi levantado | **Fechada a parte do lint na F1-E2, com o dado que faltava:** o `rtk` **estava** presente durante toda a Fase 0 — binário de 26/07/2026, hook em `~/.claude/settings.json` de 11/08, e a Fase 0 rodou de 16 a 17/08. Então o segundo suspeito não cai por ausência. Cai pela medição: com 8 diagnósticos reais plantados, `pnpm lint` sai byte-idêntico nos três caminhos, e na forma `npx oxlint` a única diferença é a linha `npm warn` mudando de posição. Ressalva honesta: o mtime do binário diz "não foi reescrito desde 26/07", o que torna 0.44.0 a versão provável durante a Fase 0, não a versão provada. | Aparecer outra divergência entre saída de comando e realidade, ou alguém depender de um comando ainda não medido para verificação de etapa |
 | P-10 | Reavaliar a isenção de `noUncheckedIndexedAccess` para `src/render/` e `src/app/`. Medido na F1-E1: os dois passam hoje com a flag ligada — o `flowField.ts` escreve por atribuição (que a flag não toca) e lê com `?? 0`. A isenção registrada no `CLAUDE.md` é portanto mais folgada do que o código precisa. Estado medido está na `FASE-0-RETROSPECTIVA.md`; a ação mora aqui, porque ninguém varre retrospectiva de fase encerrada atrás de coisa pra fazer | Alguém propor mexer na isenção, ou a F1-E6 tocar no renderer de verdade |
-| P-11 | Existem outros atores econômicos no jogo? Hoje o `World` tem **um** `money`, **um** `depositKg`, **um** `stockKg` — ator único, implícito, e nunca decidido: essa forma veio do slice de D-004 sem que a pergunta fosse feita. A visão de D-019 fala em comprar construção de terceiros a preço negociado, o que implica concorrente com patrimônio próprio. **Não construir para múltiplos atores agora** — só não cimentar ator único sem perguntar | **ANTES** de o `World` ganhar estrutura que assuma ator único, ou seja no início da **F1-E4**, que adiciona funcionários e folha. Depois de folha, imposto e save migrados por cima da suposição, desfazer fica caro |
+| P-11 | Existem outros atores econômicos no jogo? Hoje o `World` tem **um** `money`, **um** `depositKg`, **um** `stockKg`, e desde a F1-E4 **um** `employeeCount` — ator único, implícito, e nunca decidido: essa forma veio do slice de D-004 sem que a pergunta fosse feita. A visão de D-019 fala em comprar construção de terceiros a preço negociado, o que implica concorrente com patrimônio próprio. **Não construir para múltiplos atores agora** — só não cimentar ator único sem perguntar. **Avaliado no início da F1-E4** (item 0 da etapa), com o custo de abrir a porta agora escrito por extenso: **Custo de abrir:** envolver os escalares de ator único (`money`, `depositKg`, `stockKg`, `employeeCount`) num struct por empresa — `World.player: Company` hoje, `World.actors: Record<ActorId, Company>` depois — e mover os sites que os leem e escrevem (`mining.ts`, `tick.ts`, `World.ts`, schema de save, handlers de `game.ts`). Mecânico, proporcional ao número de referências, sem bloqueio estrutural. **Também não fica aberto, e é herdado, não novo:** funcionário não tem dono (não há `ownerId`), e preço e cadência são globais e únicos (`MINING.pricePerKg`, `employeeKgPerCycle`). O item de D-019 que mais pesa é "compra de construção de terceiros a preço negociado", que exige ator com patrimônio próprio. **Considerado e RECUSADO nesta etapa:** aninhar os campos num objeto agora, aproveitando que a migração v2→v3 já seria escrita. Recusado porque P-11 diz para não construir para múltiplos atores, D-019 é visão e não escopo, e a avaliação acima mostra que não há precipício — o refactor não fica mais caro por adiar. Registrado para não ser relitigado. Isto é estimativa, não decisão — **P-11 CONTINUA ABERTA** | Antes de um segundo ator econômico de verdade existir (D-019: construção de terceiros com patrimônio próprio), ou antes de outro escalar entrar nesse mesmo balde sem essa pergunta ser refeita |
 | P-12 | Cobrir por teste o que hoje só um humano abrindo o jogo pega. Cinco bugs de tela na F1-E3, quatro deles invisíveis pra toda a suíte, e `src/app/game.ts` é a maior área descoberta do projeto. A lista exata do que está sem rede: **(1)** a defasagem do `resizeTo` do Pixi (o evento `resize` dispara com o canvas ainda no tamanho antigo — medido, mas não reproduzível em vitest sem canvas real); **(2)** o `cameraInput.refresh()` ser chamado uma vez por frame — as funções puras têm teste, o laço de `game.ts` não tem nenhum, então remover a chamada passa verde; **(3)** sobreposição de texto entre `DebugOverlayView` e `ReadoutView`, cujas posições são constantes em dois arquivos que nada correlaciona (foi assim que o bug nasceu); **(4)** o gerente ser visível — a aritmética de `zIndex` é testável, "um humano consegue vê-lo" não; **(5)** fiação de DOM em geral: tecla N, clique esquerdo/direito, e a conversão via `getBoundingClientRect`. **Cinco numa etapa é padrão, não azar**. **Atualizado na continuação da F1-E3 (D-020), e a pendência NÃO fecha:** entrou rede em duas partes que antes não tinham nenhuma. **(a)** toda a decisão de "o que aconteceu de fato" saiu de `game.ts` pra `eventLog.ts`, que é puro e tem 27 testes — incluindo o ponto delicado, `drainActions`, cuja regra é "frame sem tick NÃO drena" (com `TICK_MS = 100` a 60fps a maioria dos frames não roda tick, e drenar ali inventaria um "nada aconteceu" pra um comando que nem rodou); três desses testes usam o próprio `sim/` como oráculo, comparando o texto contra `tick()` de verdade em vez de amostras montadas à mão. **(b)** `markerAlpha` do marcador de clique é pura e testada, inclusive o caso do timestamp anterior ao clique. **O que continua descoberto, e é o que importa:** os cinco itens originais seguem todos abertos, e agora somam-se a eles o laço de `runFrame` — a ORDEM entre drenar e avançar o gerente é correção de verdade (drenar depois mediria a ação nova contra um tick que não rodou) e nada em teste a fixa —, a detecção de chegada por `hadOrder && !manager.order`, e a correspondência entre `actionQueue` e `frameState.pendingCommands`, que hoje é invariante de leitura e não de teste. A verificação dos ramos `minerou`/`carga cheia`/`vendeu`/`carga vazia` de ponta a ponta foi feita dirigindo o browser, não em vitest: 25 golpes até `carga cheia`, `vendeu 50 kg por R$ 22,50` e `carga vazia, nada a vender` na sequência — evidência, mas não regressão | Um quinto bug de tela aparecer, ou a retrospectiva da Fase 1 |
+
+| P-13 | O que acontece quando o jogador fica no vermelho? A folha (F1-E4) pode deixar `money` negativo de propósito — sem falência, sem consequência, ainda. Dívida é o que faz a folha ser compromisso de verdade, e compromisso é o que o imposto da F1-E5 precisa encontrar pela frente; sem isso o imposto morderia um jogador que nunca sentiu risco nenhum antes | A F1-E5 calibrar o imposto |
 
 ## Pendências fechadas
 

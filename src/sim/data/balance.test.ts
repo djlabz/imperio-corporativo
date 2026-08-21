@@ -8,6 +8,10 @@ function valid(overrides: Record<string, unknown> = {}): unknown {
     initialDepositKg: 5000,
     pricePerKgCents: 45,
     carryCapacityKg: 50,
+    hireCostCents: 6000,
+    wagePerEmployeeCents: 2000,
+    employeeKgPerCycle: 1,
+    employeeCycleTicks: 15,
     ...overrides,
   };
 }
@@ -20,6 +24,10 @@ describe("parseMiningBalance()", () => {
     expect(balance.initialDepositKg).toBe(5000);
     // Money é branded number: continua o número de centavos, não um objeto.
     expect(balance.pricePerKg).toBe(45);
+    expect(balance.hireCost).toBe(6000);
+    expect(balance.wagePerEmployee).toBe(2000);
+    expect(balance.employeeKgPerCycle).toBe(1);
+    expect(balance.employeeCycleTicks).toBe(15);
   });
 
   it("rejeita campo faltando, com o nome do campo na mensagem", () => {
@@ -28,6 +36,10 @@ describe("parseMiningBalance()", () => {
       "kgPerStrike",
       "initialDepositKg",
       "pricePerKgCents",
+      "hireCostCents",
+      "wagePerEmployeeCents",
+      "employeeKgPerCycle",
+      "employeeCycleTicks",
     ]) {
       const raw = valid();
       delete (raw as Record<string, unknown>)[field];
@@ -60,6 +72,19 @@ describe("parseMiningBalance()", () => {
     expect(() => parseMiningBalance(valid({ initialDepositKg: -1 }))).toThrow(/initialDepositKg/);
   });
 
+  it("rejeita balanceamento de funcionário sem sentido: custo zero, salário zero, ciclo zero", () => {
+    expect(() => parseMiningBalance(valid({ hireCostCents: 0 }))).toThrow(/hireCostCents/);
+    expect(() => parseMiningBalance(valid({ wagePerEmployeeCents: 0 }))).toThrow(
+      /wagePerEmployeeCents/,
+    );
+    expect(() => parseMiningBalance(valid({ employeeKgPerCycle: 0 }))).toThrow(
+      /employeeKgPerCycle/,
+    );
+    expect(() => parseMiningBalance(valid({ employeeCycleTicks: 0 }))).toThrow(
+      /employeeCycleTicks/,
+    );
+  });
+
   it("valida também o JSON de verdade, não só objetos de teste", () => {
     // Âncora: se mining.json for editado pra algo inválido, o import do módulo
     // explode e ISTO é o que aponta o dedo. Sem esta asserção, os testes acima
@@ -69,5 +94,9 @@ describe("parseMiningBalance()", () => {
     expect(MINING.pricePerKg).toBeGreaterThan(0);
     expect(MINING.initialDepositKg).toBeGreaterThanOrEqual(0);
     expect(MINING.carryCapacityKg).toBeGreaterThan(0);
+    expect(MINING.hireCost).toBeGreaterThan(0);
+    expect(MINING.wagePerEmployee).toBeGreaterThan(0);
+    expect(MINING.employeeKgPerCycle).toBeGreaterThan(0);
+    expect(MINING.employeeCycleTicks).toBeGreaterThan(0);
   });
 });

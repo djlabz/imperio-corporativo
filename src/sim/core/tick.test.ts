@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { MINING } from "../data/balance";
+import { centavos } from "../economy/money";
 import type { Command } from "./Command";
 import { tick } from "./tick";
 import { createWorld, type World } from "./World";
 
 const MINE: Command = { kind: "MINE" };
 const SELL: Command = { kind: "SELL" };
+const HIRE: Command = { kind: "HIRE" };
 
 function fresh(): World {
   return createWorld("tick-test");
@@ -55,21 +57,142 @@ describe("tick()", () => {
     expect(after.tickCount).toBe(42);
   });
 
-  // NÃO existe aqui um teste de "o tickCount avança DEPOIS dos comandos". Foi
-  // tentado e removido: a mutação que move o incremento pra antes do laço passa
-  // verde, porque NENHUM comando lê tickCount hoje — as duas ordens produzem
-  // exatamente o mesmo World. Um teste com esse nome afirmaria uma garantia que
-  // ele não verifica, que é pior que não ter teste (D-011).
-  //
-  // A ordem (comandos primeiro, contador depois) está em tick.ts e vale como
-  // decisão; ela passa a ser OBSERVÁVEL quando existir comando que dependa do
-  // tick — o imposto da F1-E5 é o candidato. O teste nasce lá, junto do primeiro
-  // consumidor de verdade.
+  // Esta seção dizia, até a F1-E4: "não existe teste de 'tickCount avança DEPOIS
+  // dos comandos' porque nenhum comando lê tickCount hoje, e a ordem só fica
+  // observável quando um existir — candidato: o imposto da F1-E5." A previsão
+  // errou o candidato, não o raciocínio: quem tornou a ordem observável foi
+  // HIRE, na PRÓPRIA F1-E4 — runEmployees() lê tickCount, e roda depois do
+  // incremento E depois do laço de comandos. O teste que a nota prometia é o de
+  // baixo.
+
+  it("HIRE aplicado ANTES da produção do ciclo: quem contrata bem no marco já produz no mesmo tick", () => {
+    // Prova a ordem (comandos → incremento → produção → folha) observando o
+    // efeito dela: se HIRE rodasse DEPOIS de runEmployees, o funcionário novo
+    // não existiria ainda quando a produção for calculada, e este tick não
+    // produziria nada.
+    const before: World = {
+      ...fresh(),
+      tickCount: MINING.employeeCycleTicks - 1,
+      money: MINING.hireCost,
+    };
+    const after = tick(before, [HIRE]);
+
+    expect(after.employeeCount).toBe(1);
+    expect(after.depositKg).toBe(MINING.initialDepositKg - MINING.employeeKgPerCycle);
+    expect(after.money).toBe(MINING.pricePerKg * MINING.employeeKgPerCycle);
+  });
 
   it("não muta o World de entrada", () => {
     const before = fresh();
     const snapshot = { ...before };
     tick(before, [MINE, SELL]);
     expect(before).toEqual(snapshot);
+  });
+});
+
+describe("tick() — HIRE", () => {
+  it("com dinheiro suficiente, soma um funcionário e debita o custo", () => {
+    const before = { ...fresh(), money: MINING.hireCost };
+    const after = tick(before, [HIRE]);
+
+    expect(after.employeeCount).toBe(1);
+    expect(after.money).toBe(0);
+  });
+
+  it("sem dinheiro suficiente, é no-op — a linha de evento é quem explica por quê", () => {
+    const before = { ...fresh(), money: centavos(0) };
+    const after = tick(before, [HIRE]);
+
+    expect(after.employeeCount).toBe(0);
+    expect(after.money).toBe(0);
+  });
+});
+
+describe("tick() — ciclo de funcionário e folha (F1-E4)", () => {
+  function withEmployees(count: number, overrides: Partial<World> = {}): World {
+    return { ...fresh(), employeeCount: count, ...overrides };
+  }
+
+  it("produz exatamente na cadência, e não em nenhum outro tick", () => {
+    let w = withEmployees(3);
+    const producedAt = MINING.employeeCycleTicks;
+
+    for (let t = 1; t < producedAt; t++) {
+      const before = w.depositKg;
+      w = tick(w, []);
+      expect(w.depositKg).toBe(before); // nenhuma produção fora do marco
+    }
+
+    const beforeDeposit = w.depositKg;
+    w = tick(w, []); // este é o tick do marco
+    expect(w.depositKg).toBe(beforeDeposit - 3 * MINING.employeeKgPerCycle);
+  });
+
+  it("a virada do mês cobra a folha exatamente UMA vez, não duas", () => {
+    let w = withEmployees(2, {
+      tickCount: MINING.fiscalMonthTicks - 2,
+      money: centavos(100_000),
+    });
+
+    w = tick(w, []); // ainda dentro do mês
+    const moneyAntesDaVirada = w.money;
+
+    w = tick(w, []); // este tick CRUZA a fronteira — cobra uma vez
+    const cobrado = moneyAntesDaVirada - w.money;
+
+    w = tick(w, []); // um tick a mais, ainda dentro do mês novo — não cobra de novo
+    expect(w.money).toBe(moneyAntesDaVirada - cobrado);
+  });
+
+  it("virada do mês com zero funcionários não cobra nada", () => {
+    const w = withEmployees(0, {
+      tickCount: MINING.fiscalMonthTicks - 1,
+      money: centavos(5_000),
+    });
+    const after = tick(w, []);
+    expect(after.money).toBe(5_000);
+  });
+
+  it("dinheiro fica negativo quando a folha não cabe, e o jogo não trava nem lança", () => {
+    // depositKg: 0 isola a folha do ciclo de produção — 1800 é múltiplo de
+    // employeeCycleTicks (15), então a virada do mês TAMBÉM seria marco de
+    // produção; sem depósito, produced = min(kg, 0) = 0 e só a folha se mede.
+    const w = withEmployees(50, {
+      tickCount: MINING.fiscalMonthTicks - 1,
+      money: centavos(100),
+      depositKg: 0,
+    });
+    expect(() => tick(w, [])).not.toThrow();
+
+    const after = tick(w, []);
+    expect(after.money).toBeLessThan(0);
+    expect(after.money).toBe(100 - 50 * MINING.wagePerEmployee);
+  });
+
+  it("1800 ticks com N funcionários batem com a conta feita à mão", () => {
+    // O teste que mais importa (item 6 da etapa): se divergir da conta de
+    // cabeça, é acumulador fracionário disfarçado, ou cadência errada.
+    //
+    // Conta: fiscalMonthTicks=1800, employeeCycleTicks=15 → 120 ciclos de
+    // produção em 1800 ticks (1800/15). Com N funcionários, cada ciclo produz
+    // N×employeeKgPerCycle kg, vendidos a pricePerKg. Nenhum clamp de depósito
+    // entra em jogo pra N pequeno (N=2 dá 240kg em 5000kg de depósito). Um mês
+    // fiscal completo cabe exatamente nos 1800 ticks, então a folha cobra
+    // EXATAMENTE uma vez, no último tick.
+    const N = 2;
+    let w: World = { ...fresh(), employeeCount: N };
+
+    for (let t = 0; t < MINING.fiscalMonthTicks; t++) {
+      w = tick(w, []);
+    }
+
+    const cycles = MINING.fiscalMonthTicks / MINING.employeeCycleTicks;
+    const kgProduced = cycles * N * MINING.employeeKgPerCycle;
+    const revenue = kgProduced * MINING.pricePerKg;
+    const payroll = N * MINING.wagePerEmployee;
+
+    expect(w.depositKg).toBe(MINING.initialDepositKg - kgProduced);
+    expect(w.money).toBe(revenue - payroll);
+    expect(w.tickCount).toBe(MINING.fiscalMonthTicks);
   });
 });

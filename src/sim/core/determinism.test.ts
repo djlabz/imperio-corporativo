@@ -68,6 +68,39 @@ describe("determinismo", () => {
     expect(worldA.money).toBeGreaterThan(0);
   });
 
+  it("com HIRE na fila (F1-E4): mesmo World e mesmos comandos produzem o mesmo estado", () => {
+    // HIRE é o primeiro comando cujo efeito (runEmployees, payPayroll) depende de
+    // tickCount — exatamente o tipo de dependência que poderia divergir entre
+    // duas trajetórias por um motivo bobo (ordem de iteração, ponto flutuante
+    // escondido). Este teste teria pegado isso.
+    function commandsWithHire(tickIndex: number): readonly Command[] {
+      const queue: Command[] = [];
+      if (tickIndex % 3 === 0) queue.push({ kind: "MINE" });
+      if (tickIndex % 50 === 0) queue.push({ kind: "SELL" });
+      if (tickIndex % 137 === 0) queue.push({ kind: "HIRE" });
+      return queue;
+    }
+
+    let worldA: World = createWorld("seed-hire");
+    let worldB: World = createWorld("seed-hire");
+
+    const checkpoints = new Set([1, 137, 1_800, 1_801, 2_500, 9_999]);
+    for (let i = 1; i <= TICKS; i++) {
+      const queue = commandsWithHire(i);
+      worldA = tick(worldA, queue);
+      worldB = tick(worldB, queue);
+      if (checkpoints.has(i)) {
+        expect(worldB).toEqual(worldA);
+      }
+    }
+
+    expect(worldB).toEqual(worldA);
+    // Âncora: prova que HIRE, produção de funcionário E folha aconteceram de
+    // verdade nesta trajetória, não que as duas travessias ficaram paradas e
+    // "empataram" por não terem feito nada.
+    expect(worldA.employeeCount).toBeGreaterThan(0);
+  });
+
   // O teste "seeds diferentes produzem resultados diferentes" que existia
   // aqui na Etapa 2 foi removido de propósito nesta etapa, junto com o campo
   // World.noise que ele exercitava. Sem esse campo, nada em World depende da

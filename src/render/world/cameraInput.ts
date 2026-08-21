@@ -6,6 +6,23 @@ const ZOOM_STEP = 1.1;
 
 export interface CameraInputHandle {
   getState(): CameraState;
+  /**
+   * Reaplica `constrain` sobre o estado atual. Chamar UMA VEZ POR FRAME, antes de
+   * ler getState().
+   *
+   * Por que por frame e não num listener de "resize": no instante em que o evento
+   * `resize` dispara, o canvas ainda está no tamanho ANTIGO — o `resizeTo` do Pixi
+   * só aplica no frame seguinte. Medido na F1-E3:
+   *
+   *   no evento resize:  window.innerWidth 1400, canvas.width 2400  <- defasado
+   *   1 frame depois:    window.innerWidth 1400, canvas.width 1400
+   *
+   * Uma correção feita no listener calcula o limite com a dimensão errada, e o
+   * sintoma é o que motivou isto: mundo pequeno com preto em volta depois de ir
+   * pra tela cheia. Por frame não tem essa suposição de ordem, e o custo é
+   * aritmética de duas linhas.
+   */
+  refresh(): void;
   destroy(): void;
 }
 
@@ -23,8 +40,18 @@ export function attachCameraInput(
   worldContainer: Container,
   initial: CameraState,
   getViewSize: () => { width: number; height: number },
+  /**
+   * Aplicado depois de todo pan e zoom, e no estado inicial. É por aqui que o
+   * limite do mundo entra (clampToWorld) sem que este módulo precise conhecer o
+   * tamanho do mapa.
+   *
+   * Obrigatório, sem default: um `constrain` opcional seria esquecido, e o
+   * sintoma é arrastar o mapa pro vazio sem forma de voltar — mesmo raciocínio de
+   * D-016 pra fila de comandos.
+   */
+  constrain: (state: CameraState) => CameraState,
 ): CameraInputHandle {
-  let state = initial;
+  let state = constrain(initial);
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
@@ -47,7 +74,7 @@ export function attachCameraInput(
     const dy = event.clientY - lastY;
     lastX = event.clientX;
     lastY = event.clientY;
-    state = panBy(state, dx, dy);
+    state = constrain(panBy(state, dx, dy));
     apply();
   }
 
@@ -57,7 +84,7 @@ export function attachCameraInput(
 
   function onWheel(event: WheelEvent): void {
     event.preventDefault();
-    state = zoomBy(state, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+    state = constrain(zoomBy(state, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP));
     apply();
   }
 
@@ -77,6 +104,9 @@ export function attachCameraInput(
 
   return {
     getState: () => state,
+    refresh(): void {
+      state = constrain(state);
+    },
     destroy(): void {
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);

@@ -53,3 +53,63 @@ export function applyToContainer(
     viewHeight / 2 - state.y * state.zoom,
   );
 }
+
+/**
+ * Zoom que faz o mundo CABER na viewport, preso a [MIN_ZOOM, MAX_ZOOM].
+ *
+ * Existe porque um zoom inicial fixo é calibrado pra um tamanho de janela só: a
+ * F1-E3 abria em MIN_ZOOM pra caber o mundo em 1600x900, e numa janela de
+ * 2400x1300 o mundo virava um retângulo pequeno com preto em volta. Medido, não
+ * suposto — reproduzido redimensionando o browser.
+ *
+ * `min` e não `max`: com `max`, o eixo mais folgado mandaria e o outro ficaria
+ * cortado. Cabe inteiro por construção, no eixo mais apertado.
+ */
+export function fitZoom(
+  worldWidth: number,
+  worldHeight: number,
+  viewWidth: number,
+  viewHeight: number,
+): number {
+  if (worldWidth <= 0 || worldHeight <= 0) return 1;
+  return clamp(Math.min(viewWidth / worldWidth, viewHeight / worldHeight), MIN_ZOOM, MAX_ZOOM);
+}
+
+/**
+ * Prende o foco da câmera pra que a área visível não saia do mundo.
+ *
+ * Dois regimes por eixo, e o segundo é o que conserta o redimensionamento:
+ *
+ * - a viewport cabe DENTRO do mundo naquele eixo: o foco anda livre, mas só até
+ *   onde a borda da tela encontra a borda do mundo. Sem isto, dá pra arrastar o
+ *   mapa até o vazio e perder o jogo de vista, sem nenhuma forma de voltar além
+ *   de recarregar.
+ * - a viewport é MAIOR que o mundo naquele eixo: não há o que escolher — o foco
+ *   é fixado no centro do mundo. É isto que faz o mundo continuar centrado ao
+ *   aumentar a janela, em vez de ficar deslocado.
+ *
+ * Chamado com o tamanho de tela ATUAL, então redimensionar recalcula o limite
+ * sozinho; não há evento de resize pra escutar nem estado pra invalidar.
+ */
+export function clampToWorld(
+  state: CameraState,
+  worldWidth: number,
+  worldHeight: number,
+  viewWidth: number,
+  viewHeight: number,
+): CameraState {
+  const halfViewWorldX = viewWidth / 2 / state.zoom;
+  const halfViewWorldY = viewHeight / 2 / state.zoom;
+
+  return {
+    ...state,
+    x: clampAxis(state.x, worldWidth, halfViewWorldX),
+    y: clampAxis(state.y, worldHeight, halfViewWorldY),
+  };
+}
+
+function clampAxis(focus: number, worldSize: number, halfView: number): number {
+  // A viewport é mais larga que o mundo neste eixo: centro, sem escolha.
+  if (halfView * 2 >= worldSize) return worldSize / 2;
+  return clamp(focus, halfView, worldSize - halfView);
+}

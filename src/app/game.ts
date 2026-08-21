@@ -23,7 +23,13 @@ import { MINING } from "../sim/data/balance";
 import type { Command } from "../sim/core/Command";
 import { buildNpcPoolView, syncNpcPoolView } from "../render/npc/NpcPoolView";
 import { createNpcPool, stepNpcPool } from "../render/npc/npcPool";
-import { applyToContainer, createCameraState, MIN_ZOOM } from "../render/world/camera";
+import {
+  applyToContainer,
+  clampToWorld,
+  createCameraState,
+  fitZoom,
+  type CameraState,
+} from "../render/world/camera";
 import { attachCameraInput } from "../render/world/cameraInput";
 import {
   computeBudgetOccupancyPercent,
@@ -142,17 +148,41 @@ export async function startGame(root: HTMLElement): Promise<Application> {
   app.stage.addChild(overlay); // filho de app.stage, não de worldContainer — fica fixo na tela
   app.stage.addChild(readout); // idem: instrumento, não parte do mundo
 
+  const viewSize = (): { width: number; height: number } => ({
+    width: app.screen.width,
+    height: app.screen.height,
+  });
+
+  const constrainCamera = (state: CameraState): CameraState => {
+    const { width, height } = viewSize();
+
+    // Piso de zoom no "cabe o mundo": abaixo disso a viewport é MAIOR que o mundo
+    // e sobra preto em volta, sem nada a mais pra ver. Foi exatamente o sintoma
+    // relatado — mundo como um retângulo pequeno com preto em volta depois de ir
+    // pra tela cheia: a zoom continuava a que caberia na janela ANTERIOR.
+    //
+    // É piso, não valor fixo: quem deu zoom PARA DENTRO fica onde está, porque aí
+    // o mundo é maior que a tela e há mais o que ver panorâmicando. Só o lado que
+    // não serve pra nada é corrigido.
+    const floor = fitZoom(WORLD_WIDTH, WORLD_HEIGHT, width, height);
+    const zoomed = state.zoom < floor ? { ...state, zoom: floor } : state;
+
+    return clampToWorld(zoomed, WORLD_WIDTH, WORLD_HEIGHT, width, height);
+  };
+
   const cameraInput = attachCameraInput(
     app.canvas,
     worldContainer,
-    // Zoom inicial em MIN_ZOOM: o mundo é 2560x1440 e a viewport lógica é
-    // 1920x1080, então a zoom 1 nem o depósito nem a refinaria cabem na tela —
-    // o jogador abria o jogo sem ver a si mesmo nem os dois destinos. Achado
-    // abrindo o jogo. Ver os dois extremos do ciclo é o que a F1-E3 existe pra
-    // permitir julgar; a câmera que SEGUE o gerente é candidata pra F1-E6, com o
-    // HUD, e não foi inventada aqui.
-    createCameraState(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, MIN_ZOOM),
-    () => ({ width: app.screen.width, height: app.screen.height }),
+    // Zoom inicial CALCULADO pra caber o mundo na viewport, em vez de um valor
+    // fixo: a F1-E3 abria em MIN_ZOOM, que cabia o mundo em 1600x900 e deixava
+    // preto em volta numa janela maior. Ver fitZoom em camera.ts.
+    createCameraState(
+      WORLD_WIDTH / 2,
+      WORLD_HEIGHT / 2,
+      fitZoom(WORLD_WIDTH, WORLD_HEIGHT, app.screen.width, app.screen.height),
+    ),
+    viewSize,
+    constrainCamera,
   );
 
   // O gerente começa NA FRENTE do depósito, não em cima dele.
@@ -244,6 +274,14 @@ export async function startGame(root: HTMLElement): Promise<Application> {
           console.log(`load ok — tick ${world.tickCount}`);
         })
         .catch((error: unknown) => console.error("load falhou:", error));
+    } else if (event.key === "n") {
+      // Andaime de desenvolvimento, não conteúdo: os NPCs decorativos poluem a
+      // leitura na hora de balancear (e vagam pra fora dos limites do mapa, o que
+      // é comportamento conhecido do campo de travessia). Só a VISIBILIDADE é
+      // desligada — o pool continua existindo e sendo atualizado, então isto não
+      // é um jeito disfarçado de medir performance sem eles.
+      npcPoolView.container.visible = !npcPoolView.container.visible;
+      console.log(`NPCs decorativos: ${npcPoolView.container.visible ? "on" : "off"}`);
     }
   });
 
@@ -267,6 +305,10 @@ export async function startGame(root: HTMLElement): Promise<Application> {
     // deltaTime não multiplica valor de jogo, e "velocidade constante
     // independente do frame rate" é o mesmo princípio pra visual). Um passo
     // de NPC por tick que rodou neste frame, não um passo por frame.
+    // Antes de ler a câmera: reaplica o limite com o tamanho de tela ATUAL. É
+    // isto que faz o redimensionamento funcionar — ver refresh() em cameraInput.ts
+    // pro porquê de não ser um listener de resize.
+    cameraInput.refresh();
     const camera = cameraInput.getState();
     for (let i = 1; i <= result.ticksRan; i++) {
       stepNpcPool(npcPool, flowField, tickCountBefore + i, camera.x, camera.y);

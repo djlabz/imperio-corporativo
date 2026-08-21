@@ -59,6 +59,35 @@ export const LONG_FRAME_THRESHOLD_MS = 20;
 export const VERY_LONG_FRAME_THRESHOLD_MS = 33;
 
 /**
+ * SOB VSYNC OS DOIS CONTADORES SÃO IGUAIS, E ISSO É CORRETO — não é bug, e já
+ * levantou suspeita uma vez. Medido na F1-E3, com histograma temporário sobre
+ * 1518 frames de sessão real:
+ *
+ *   faixa      frames
+ *   00-05           1
+ *   15-18       1.185
+ *   18-20           0
+ *   20-25           0     <-- vazia
+ *   25-33           0     <-- vazia
+ *   33-50         329
+ *   50+             3
+ *
+ *   >20ms: 332    >33ms: 332    na faixa 20-33ms: ZERO
+ *
+ * O motivo é o vsync: a 60Hz o compositor entrega frame em múltiplos de ~16,7ms,
+ * então um frame ou cabe em uma janela de refresh (~16,7ms) ou perde e vai pra
+ * duas (~33,3ms). A faixa 20–33ms é vazia POR CONSTRUÇÃO, e os dois contadores
+ * medem o mesmo evento — "perdeu pelo menos um refresh".
+ *
+ * Os dois só divergem no modo SEM VSYNC (ver `uncapped` no OverlaySnapshot), onde
+ * o tempo de frame não é quantizado. É por isso que os dois existem, e por isso
+ * nenhum dos dois deve ser removido por "parecer redundante": a redundância é do
+ * ambiente, não do instrumento.
+ *
+ * Se algum dia os números divergirem sob vsync, aí sim há o que investigar.
+ */
+
+/**
  * Contagem cumulativa de frames longos numa janela fixa (a sessão de
  * medição inteira — sem reset automático; cria um tracker novo pra
  * reiniciar a janela). Isto é a alternativa a "não ter o profiler de GC do
